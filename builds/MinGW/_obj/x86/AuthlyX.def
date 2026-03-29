@@ -1,0 +1,12 @@
+LIBRARY AuthlyX.dll
+EXPORTS
+  AuthlyX_Create
+  AuthlyX_Init
+  AuthlyX_Login
+  AuthlyX_LicenseLogin
+  AuthlyX_DeviceLogin
+  AuthlyX_Authenticate
+  AuthlyX_GetMessage
+  AuthlyX_GetUsername
+  AuthlyX_GetLicenseKey
+  AuthlyX_Destroy
