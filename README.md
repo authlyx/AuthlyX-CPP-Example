@@ -1,23 +1,41 @@
 # AuthlyX C++ SDK
 
-This is a C++ authentication SDK for desktop and Windows applications that want simple integration with the AuthlyX API.
+AuthlyX for C++ is built for native Windows applications that need a straightforward way to talk to the AuthlyX API.
 
-This folder is primarily for SDK users. The sample project here is only a reference example to help you integrate faster.
+This folder includes:
 
-## Supported Integration Styles
+- the SDK header
+- a Visual Studio example project
+- prebuilt MSVC binaries
+- prebuilt MinGW binaries
 
-The C++ SDK supports:
+## What This Package Supports
 
-- Header-only
-- Static library
-- DLL
+The SDK works in three common setups:
 
-All three use the same codebase and the same SDK behavior.
+1. `AuthlyX.h` directly in your project
+2. prebuilt static library
+3. prebuilt DLL
 
-## Structure
+If you are starting fresh, use the header method first. It is the quickest setup and it is the easiest one to debug.
+
+## Requirements
+
+- Windows desktop C++ project
+- C++17
+
+Tested in this repository with:
+
+- Visual Studio 2026 / MSVC `v145`, `v143`, `v142`
+- MinGW-w64 on MSYS2
+
+If your toolchain already supports modern C++17 Windows development, you usually do not need anything special beyond the normal Windows SDK pieces your compiler already uses.
+
+## Folder Layout
 
 ```text
 AuthlyX-CPP-Example/
+|- AuthlyX.h
 |- include/
 |  \- AuthlyX.h
 |- src/
@@ -29,64 +47,174 @@ AuthlyX-CPP-Example/
 |  \- MinGW/
 |     |- x86/
 |     \- x64/
-\- AuthlyX.h
+\- AuthlyX-CPP-Example/
+   \- main.cpp
 ```
 
-- `include/AuthlyX.h` is the real SDK header.
-- `src/AuthlyX.cpp` is the thin source wrapper used to build the precompiled library and DLL tiers.
-- `AuthlyX.h` is the simple include developers can drop into their project.
+- `AuthlyX.h` is the easiest include path for normal C++ projects.
+- `include/AuthlyX.h` is the main SDK implementation.
+- `src/AuthlyX.cpp` is used to build the static library and DLL outputs.
+- `AuthlyX-CPP-Example/main.cpp` is the reference example.
 
 ## Quick Start
 
 ```cpp
-AuthlyX AuthlyXApp(
-    "12345678",
-    "MYAPP",
-    "1.0.0",
-    "wLZchZYsGanxViAudtYWWQFIQVomt2O3R6wkihR3B"
-);
+#include "AuthlyX.h"
 
-/*
-Optional:
-- Set debug to false to disable SDK logs.
-- Set api to your custom domain, for example: https://example.com/api/v2
-*/
+int main() {
+    AuthlyX AuthlyXApp(
+        "12345678",
+        "MYAPP",
+        "1.0.0",
+        "your-secret"
+    );
+
+    if (!AuthlyXApp.Init()) {
+        return 1;
+    }
+
+    return 0;
+}
 ```
 
-Then initialize:
-
-```cpp
-AuthlyXApp.Init();
-```
-
-## Optional Parameters
+Optional constructor values:
 
 ```cpp
 AuthlyX AuthlyXApp(
     "12345678",
     "MYAPP",
     "1.0.0",
-    "wLZchZYsGanxViAudtYWWQFIQVomt2O3R6wkihR3B",
+    "your-secret",
     false,
     "https://example.com/api/v2"
 );
 ```
 
-### Available options
+- `debug` defaults to `true`
+- `api` defaults to `https://authly.cc/api/v2`
 
-- `debug`
-  - `true` by default
-  - set to `false` to disable SDK logs
+## Installation
 
-- `api`
-  - defaults to `https://authly.cc/api/v2`
-  - set it if you use a custom domain
+### 1. Class Method (`AuthlyX.h`)
 
-## Available Methods
+Use this if you want the standard C++ class experience.
+
+Steps:
+
+1. Copy `AuthlyX.h` into your project, or add the folder to your include path.
+2. Include it where you need the SDK.
+3. Build your project normally.
+
+```cpp
+#include "AuthlyX.h"
+```
+
+This route is best for:
+
+- console apps
+- Win32 desktop apps
+- WinForms/WPF native interop hosts
+- internal tools
+
+Notes:
+
+- On MSVC, the required Windows libraries are linked automatically by the header.
+- On MinGW, link your normal Windows system libraries if your project does not already pull them in.
+
+### 2. Static Library (`.lib` / `.a`)
+
+Use this if you want faster rebuilds or you prefer shipping a compiled SDK instead of the full implementation header.
+
+For MSVC:
+
+- `builds/MSVC/x86/AuthlyX.lib`
+- `builds/MSVC/x64/AuthlyX.lib`
+
+For MinGW:
+
+- `builds/MinGW/x86/libAuthlyX.a`
+- `builds/MinGW/x64/libAuthlyX.a`
+
+Setup:
+
+1. Add `AuthlyX.h` to your include path.
+2. Define `AUTHLYX_SOURCE_BUILD` before including the header in the file that talks to the binary SDK.
+3. Link the matching static library for your compiler and architecture.
+
+Example:
+
+```cpp
+#define AUTHLYX_SOURCE_BUILD
+#include "AuthlyX.h"
+```
+
+Important:
+
+- Match your compiler family to the binary you use.
+- Match `x86` with `Win32`, and `x64` with `x64`.
+- On MSVC, use the normal DLL runtime setting used by modern Visual Studio projects.
+
+### 3. DLL (`.dll`)
+
+Use this when you want to update the SDK without rebuilding the host project.
+
+For MSVC:
+
+- import library: `builds/MSVC/_import/x86/AuthlyX.import.lib`
+- import library: `builds/MSVC/_import/x64/AuthlyX.import.lib`
+- runtime DLL: `builds/MSVC/x86/AuthlyX.dll`
+- runtime DLL: `builds/MSVC/x64/AuthlyX.dll`
+
+For MinGW:
+
+- import library: `builds/MinGW/_obj/x86/libAuthlyX.import.a`
+- import library: `builds/MinGW/_obj/x64/libAuthlyX.import.a`
+- runtime DLL: `builds/MinGW/x86/AuthlyX.dll`
+- runtime DLL: `builds/MinGW/x64/AuthlyX.dll`
+
+Setup:
+
+1. Add `AuthlyX.h` to your include path.
+2. Define `AUTHLYX_USE_DLL` before including the header.
+3. Link the matching import library.
+4. Place the matching `AuthlyX.dll` beside your executable.
+
+Example:
+
+```cpp
+#define AUTHLYX_USE_DLL
+#include "AuthlyX.h"
+```
+
+If you are distributing the DLL build, make sure the correct runtime files for that compiler family are present on the target machine.
+
+## Login Examples
+
+### Username and Password
+
+```cpp
+AuthlyXApp.Login("username", "password");
+```
+
+### License Key
+
+```cpp
+AuthlyXApp.Login("XXXXX-XXXXX-XXXXX-XXXXX-XXXXX");
+```
+
+### Device Login
+
+```cpp
+AuthlyXApp.Login("YOUR_MOTHERBOARD_ID", "", "motherboard");
+AuthlyXApp.Login("YOUR_PROCESSOR_ID", "", "processor");
+```
+
+## Common Methods
 
 - `Init()`
 - `Login(identifier, password = "", deviceType = "")`
 - `Register(username, password, licenseKey, email = "")`
+- `ChangePassword(oldPassword, newPassword)`
 - `ExtendTime(username, licenseKey)`
 - `GetVariable(key)`
 - `SetVariable(key, value)`
@@ -95,112 +223,9 @@ AuthlyX AuthlyXApp(
 - `SendChat(message, channelName = "")`
 - `ValidateSession()`
 
-## Authentication Example
-
-```cpp
-// Username + password
-AuthlyXApp.Login("username", "password");
-
-// License key only
-AuthlyXApp.Login("XXXXX-XXXXX-XXXXX-XXXXX-XXXXX");
-
-// Device login
-AuthlyXApp.Login("YOUR_MOTHERBOARD_ID", "", "motherboard");
-```
-
-The SDK routes `Login(...)` automatically:
-
-- `identifier + password` for username login
-- `identifier only` for license login
-- `deviceType + identifier` for device login
-
-## Username Login Example
-
-```cpp
-AuthlyXApp.Login("username", "password");
-
-if (AuthlyXApp.response.success)
-{
-    std::cout << "Login success" << std::endl;
-    std::cout << AuthlyXApp.userData.username << std::endl;
-    std::cout << AuthlyXApp.userData.subscriptionLevel << std::endl;
-}
-else
-{
-    std::cout << AuthlyXApp.response.message << std::endl;
-}
-```
-
-`userData.subscriptionLevel` is populated automatically after username, license, and device authentication flows.
-
-## License Login Example
-
-```cpp
-AuthlyXApp.Login("XXXXX-XXXXX-XXXXX-XXXXX-XXXXX");
-
-if (AuthlyXApp.response.success)
-{
-    std::cout << "License login success" << std::endl;
-}
-else
-{
-    std::cout << AuthlyXApp.response.message << std::endl;
-}
-```
-
-## Device Login Example
-
-### Motherboard
-
-```cpp
-AuthlyXApp.Login("YOUR_MOTHERBOARD_ID", "", "motherboard");
-
-if (AuthlyXApp.response.success)
-{
-    std::cout << "Motherboard login success" << std::endl;
-}
-else
-{
-    std::cout << AuthlyXApp.response.message << std::endl;
-}
-```
-
-### Processor
-
-```cpp
-AuthlyXApp.Login("YOUR_PROCESSOR_ID", "", "processor");
-
-if (AuthlyXApp.response.success)
-{
-    std::cout << "Processor login success" << std::endl;
-}
-else
-{
-    std::cout << AuthlyXApp.response.message << std::endl;
-}
-```
-
-## Variable Example
-
-```cpp
-AuthlyXApp.SetVariable("theme", "dark");
-
-std::string value = AuthlyXApp.GetVariable("theme");
-std::cout << value << std::endl;
-```
-
-## Chat Example
-
-```cpp
-AuthlyXApp.SendChat("Hello world", "MAIN");
-
-std::string chats = AuthlyXApp.GetChats("MAIN");
-std::cout << chats << std::endl;
-```
-
 ## Logging
 
-By default, SDK logging is enabled.
+SDK logging is enabled by default.
 
 Logs are written to:
 
@@ -213,153 +238,24 @@ AuthlyX AuthlyXApp(
     "12345678",
     "MYAPP",
     "1.0.0",
-    "wLZchZYsGanxViAudtYWWQFIQVomt2O3R6wkihR3B",
+    "your-secret",
     false
 );
 ```
 
-Sensitive values such as passwords, secrets, signatures, request IDs, nonces, session IDs, license keys, and hashes are masked automatically.
+Sensitive request values are masked automatically before they are written to disk.
 
-## Integration Tiers
+## Rebuilding the SDK
 
-### Header-only
-
-Include the header and compile your project normally.
-
-```cpp
-#include "AuthlyX.h"
-```
-
-Use this when you want the fastest setup with no separate linking step.
-
-### Static library
-
-Include the header and link the matching static library for your compiler family:
-
-- MSVC:
-  - `builds/MSVC/x86/AuthlyX.lib`
-  - `builds/MSVC/x64/AuthlyX.lib`
-- MinGW:
-  - `builds/MinGW/x86/libAuthlyX.a`
-  - `builds/MinGW/x64/libAuthlyX.a`
-
-### DLL
-
-Include the header and ship the matching DLL:
-
-- MSVC:
-  - `builds/MSVC/x86/AuthlyX.dll`
-  - `builds/MSVC/x64/AuthlyX.dll`
-- MinGW:
-  - `builds/MinGW/x86/AuthlyX.dll`
-  - `builds/MinGW/x64/AuthlyX.dll`
-
-## What Consumers Need Installed
-
-### Header-only users
-
-They only need:
-
-- the header
-- their normal Windows C++ compiler
-
-They do not need the prebuilt `lib` or `dll`.
-
-### Static library users
-
-They need:
-
-- the header
-- the matching static library for their compiler family
-
-They do not need both MSVC and MinGW installed. They only need the toolchain they already build their project with.
-
-### DLL users
-
-They need:
-
-- the header
-- the matching DLL
-- the same compiler family for their project
-
-Runtime notes:
-
-- MSVC DLL builds depend on the Microsoft Visual C++ runtime
-- MinGW DLL builds depend on MinGW runtime DLLs such as `libstdc++-6.dll` and the matching `libgcc` helper DLL
-
-Current observed DLL runtime dependencies:
-
-- MSVC x64:
-  - `MSVCP140.dll`
-  - `VCRUNTIME140.dll`
-  - `VCRUNTIME140_1.dll`
-- MinGW x64:
-  - `libstdc++-6.dll`
-  - `libgcc_s_seh-1.dll`
-- MinGW x86:
-  - `libstdc++-6.dll`
-  - `libgcc_s_dw2-1.dll`
-
-So consumers do not need to install the opposite compiler toolchain, but DLL users do need the correct runtime available.
-
-## C Compatibility
-
-The SDK also exposes a flat C API for C projects.
-
-Main C entry points:
-
-- `AuthlyX_Create`
-- `AuthlyX_Init`
-- `AuthlyX_Login`
-- `AuthlyX_Authenticate`
-- `AuthlyX_GetMessage`
-- `AuthlyX_GetUsername`
-- `AuthlyX_GetLicenseKey`
-- `AuthlyX_Destroy`
-
-Example:
-
-```c
-#include "AuthlyX.h"
-#include <stdio.h>
-
-int main(void) {
-    void* sdk = AuthlyX_Create("12345678", "MYAPP", "1.0.0", "your-secret");
-
-    if (!AuthlyX_Init(sdk)) {
-        printf("%s\n", AuthlyX_GetMessage(sdk));
-        AuthlyX_Destroy(sdk);
-        return 1;
-    }
-
-    if (!AuthlyX_Login(sdk, "username", "password")) {
-        printf("%s\n", AuthlyX_GetMessage(sdk));
-    }
-
-    AuthlyX_Destroy(sdk);
-    return 0;
-}
-```
-
-## Rebuilding After Changes
-
-If you change `include/AuthlyX.h`:
-
-- header-only users do not need a rebuild
-- prebuilt static libs and DLLs should be rebuilt
-
-Run:
+From this folder:
 
 ```powershell
 .\builds\MSVC\build.ps1
 .\builds\MinGW\build.ps1
 ```
 
-If you only care about one compiler family, run only that script.
-
 ## Notes
 
-- Use the root `AuthlyX.h` for the simplest include path.
 - Do not mix MSVC binaries with MinGW projects.
 - Do not mix MinGW binaries with MSVC projects.
-- The sample project in this folder is only a reference integration.
+- If you only need the class-based SDK, `AuthlyX.h` is usually the best choice.

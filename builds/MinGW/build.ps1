@@ -93,6 +93,7 @@ function Build-MingwTarget {
         "  AuthlyX_LicenseLogin",
         "  AuthlyX_DeviceLogin",
         "  AuthlyX_Authenticate",
+        "  AuthlyX_ChangePassword",
         "  AuthlyX_GetMessage",
         "  AuthlyX_GetUsername",
         "  AuthlyX_GetLicenseKey",

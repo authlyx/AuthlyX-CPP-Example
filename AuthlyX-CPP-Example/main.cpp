@@ -496,10 +496,10 @@ int main() {
     std::cout << "\nInitializing AuthlyX connection..." << std::endl;
 
     AuthlyX AuthlyXApp(
-        "12345678",
-        "wert",
-        "1.0.0",
-        "wLZchZYsGanxViAudtYWWQFIQVomt2O3R6wkihuB"
+        "b49d11af8c42",
+        "TEST",
+        "1.3",
+        "1L0edLKqHlFv0AL3NIQ7uPpikN2ECr7aZSHrNWMo"
     );
 
     /*
@@ -609,10 +609,15 @@ int main() {
 
             SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_GREEN);
             if (loggedIn) {
+                const std::string displayName = AuthlyXApp.userData.username.empty()
+                    ? AuthlyXApp.userData.licenseKey.substr(0, 8) + "..."
+                    : AuthlyXApp.userData.username;
+                const size_t paddingWidth = displayName.length() >= 25 ? 0 : 25 - displayName.length();
+
                 std::cout << "==============================================" << std::endl;
                 std::cout << "             AUTHLYX - MAIN MENU              " << std::endl;
-                std::cout << "           Welcome, " << (AuthlyXApp.userData.username.empty() ? AuthlyXApp.userData.licenseKey.substr(0, 8) + "..." : AuthlyXApp.userData.username);
-                for (int i = 0; i < 25 - (AuthlyXApp.userData.username.empty() ? 11 : AuthlyXApp.userData.username.length()); i++) std::cout << " ";
+                std::cout << "           Welcome, " << displayName;
+                for (size_t i = 0; i < paddingWidth; ++i) std::cout << " ";
                 std::cout << std::endl;
                 std::cout << "==============================================" << std::endl;
             }

@@ -22,6 +22,9 @@
 #include <memory>
 
 #define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <winhttp.h>
 #include <bcrypt.h>
@@ -29,11 +32,20 @@
 #include <iphlpapi.h>
 #include <wincrypt.h>
 
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "user32.lib")
 
 class AuthlyLogger {
 public:
@@ -161,6 +173,7 @@ public:
         bool available = false;
         std::string latestVersion;
         std::string downloadUrl;
+        bool autoUpdateEnabled = false;
         bool forceUpdate = false;
         std::string changelog;
         bool showReminder = false;
@@ -196,14 +209,14 @@ public:
         bool requireSignedResponses = false,
         long long allowedClockSkewMs = 300000)
         : baseUrl(api.empty() ? DefaultBaseUrl : api),
-          ownerId(ownerId),
-          appName(appName),
-          version(version),
-          secret(secret),
-          serverPublicKeyPem(serverPublicKeyPem),
-          requireSignedResponses(requireSignedResponses),
-          allowedClockSkewMs(allowedClockSkewMs > 0 ? allowedClockSkewMs : 300000),
-          loggingEnabled(debug) {
+        ownerId(ownerId),
+        appName(appName),
+        version(version),
+        secret(secret),
+        serverPublicKeyPem(serverPublicKeyPem),
+        requireSignedResponses(requireSignedResponses),
+        allowedClockSkewMs(allowedClockSkewMs > 0 ? allowedClockSkewMs : 300000),
+        loggingEnabled(debug) {
 
         if (ownerId.empty() || appName.empty() || version.empty() || secret.empty()) {
             response.success = false;
@@ -240,71 +253,17 @@ public:
 
         std::string errorCode = ExtractJsonValue(responseStr, "code");
         if (errorCode == "UPDATE_REQUIRED") {
-            std::string autoUpdateEnabledStr = ExtractJsonValue(responseStr, "auto_update_enabled");
-            std::string downloadUrl = ExtractJsonValue(responseStr, "auto_update_download_url");
             std::string errorMessage = ExtractJsonValue(responseStr, "message");
-
-            bool autoUpdateEnabled = (autoUpdateEnabledStr == "true");
-
-            if (!autoUpdateEnabled || downloadUrl.empty()) {
-                size_t updatePos = responseStr.find("\"update\":");
-                if (updatePos != std::string::npos) {
-                    std::string nestedObj = responseStr.substr(updatePos);
-                    std::string nestedUrl = ExtractJsonValue(nestedObj, "download_url");
-                    if (!nestedUrl.empty()) {
-                        autoUpdateEnabled = true;
-                        downloadUrl = nestedUrl;
-                    }
-                }
-            }
+            LoadUpdateData(responseStr);
 
             if (errorMessage.empty()) {
                 errorMessage = "Please update your app to the latest version.";
             }
+            ShowRequiredUpdateConsole(errorMessage);
 
-            if (autoUpdateEnabled && !downloadUrl.empty()) {
-                AuthlyLogger::Log("[UPDATE] Version outdated. Showing manual download menu.");
-
-                bool consoleAllocated = false;
-                if (GetConsoleWindow() == NULL) {
-                    AllocConsole();
-                    FILE* fDummy;
-                    freopen_s(&fDummy, "CONIN$", "r", stdin);
-                    freopen_s(&fDummy, "CONOUT$", "w", stdout);
-                    freopen_s(&fDummy, "CONOUT$", "w", stderr);
-                    consoleAllocated = true;
-                }
-
-                std::cout << "\n" << std::string(50, '=') << std::endl;
-                std::cout << "UPDATE AVAILABLE" << std::endl;
-                std::cout << std::string(50, '=') << std::endl;
-                std::cout << "Message: " << errorMessage << std::endl;
-                std::cout << "\n1. Download the latest version" << std::endl;
-                std::cout << "2. Exit" << std::endl;
-                std::cout << "\nSelect an option (1-2): ";
-
-                std::string choice;
-                std::getline(std::cin, choice);
-
-                if (choice == "1") {
-                    std::wstring wideUrl(downloadUrl.begin(), downloadUrl.end());
-                    ShellExecuteW(NULL, L"open", wideUrl.c_str(), NULL, NULL, SW_SHOWNORMAL);
-                    AuthlyLogger::Log("[UPDATE] Redirecting user to download URL...");
-                    std::cout << "\nOpening download link in your browser..." << std::endl;
-                    Sleep(2000);
-                }
-
-                if (consoleAllocated) FreeConsole();
-                response.success = false;
-                response.message = errorMessage;
-                return false;
-            }
-            else {
-                AuthlyLogger::Log("[UPDATE] Outdated version detected, using Error window.");
-                response.success = false;
-                response.message = errorMessage;
-                return false;
-            }
+            response.success = false;
+            response.message = errorMessage;
+            return false;
         }
         else if (errorCode == "VERSION_MISMATCH") {
             response.success = false;
@@ -324,28 +283,16 @@ public:
 
             LoadUpdateData(responseStr);
 
-            if (updateData.available && updateData.forceUpdate) {
-                AuthlyLogger::Log("[UPDATE] Force update required. Opening download URL: " + updateData.downloadUrl);
-                if (!updateData.downloadUrl.empty()) {
-                    OpenDownloadUrl();
-                }
-                response.success = false;
-                response.message = "Update required. Please install version " + updateData.latestVersion + " and restart the application.";
-                return false;
+            const bool hasNewerVersion =
+                updateData.available &&
+                !updateData.latestVersion.empty() &&
+                CompareSemver(updateData.latestVersion, version) > 0;
+
+            if (hasNewerVersion && HasWhitelistedUpdateMessage()) {
+                ShowWhitelistedUpdatePrompt();
             }
         }
         else {
-            size_t updatePos = responseStr.find("\"update\":");
-            if (updatePos != std::string::npos) {
-                LoadUpdateData(responseStr);
-                if (updateData.available && updateData.forceUpdate) {
-                    AuthlyLogger::Log("[UPDATE] Force update required. Opening download URL: " + updateData.downloadUrl);
-                    if (!updateData.downloadUrl.empty()) {
-                        OpenDownloadUrl();
-                    }
-                }
-            }
-
             AuthlyLogger::Log("[INIT_ERROR] " + response.message);
         }
 
@@ -442,6 +389,22 @@ public:
         };
 
         std::string responseStr = PostJson("extend", BuildJson(payload));
+        ParseResponse(responseStr);
+
+        return response.success;
+    }
+
+    bool ChangePassword(const std::string& oldPassword, const std::string& newPassword) {
+        CheckInit();
+        if (!initialized) return false;
+
+        std::map<std::string, std::string> payload = {
+            {"session_id", sessionId},
+            {"old_password", oldPassword},
+            {"new_password", newPassword}
+        };
+
+        std::string responseStr = PostJson("change-password", BuildJson(payload));
         ParseResponse(responseStr);
 
         return response.success;
@@ -778,7 +741,8 @@ public:
         long long signatureTimestampMs = 0;
         try {
             signatureTimestampMs = std::stoll(signatureTimestamp);
-        } catch (...) {
+        }
+        catch (...) {
             response.success = false;
             response.code = "AUTH_CLOCK_OUT_OF_SYNC";
             response.message = "Response signature timestamp is invalid.";
@@ -1406,7 +1370,7 @@ public:
             if (!value.empty()) {
                 target = value;
             }
-        };
+            };
 
         auto getObjectValue = [&](const std::string& objectName, const std::string& key) -> std::string {
             if (!parsed || root.type != JsonValue::Type::Object) {
@@ -1424,7 +1388,7 @@ public:
             }
 
             return JsonValueToString(valueIt->second);
-        };
+            };
 
         setIfPresent(userData.username, ExtractJsonValue(jsonResponse, "username"));
         setIfPresent(userData.email, ExtractJsonValue(jsonResponse, "email"));
@@ -1555,6 +1519,7 @@ public:
                 updateData.available = false;
                 updateData.latestVersion = "";
                 updateData.downloadUrl = "";
+                updateData.autoUpdateEnabled = false;
                 updateData.forceUpdate = false;
                 updateData.changelog = "";
                 updateData.showReminder = false;
@@ -1565,10 +1530,14 @@ public:
 
             const JsonValue* updateNode = FindJsonValueRecursive(root, "update");
             if (!updateNode || updateNode->type != JsonValue::Type::Object) {
-                updateData.available = false;
-                updateData.latestVersion.clear();
-                updateData.downloadUrl.clear();
-                updateData.forceUpdate = false;
+                updateData.available = GetNestedJsonValue(root, "auto_update_enabled") == "true" || !GetNestedJsonValue(root, "auto_update_download_url").empty();
+                updateData.latestVersion = GetNestedJsonValue(root, "server_version");
+                if (updateData.latestVersion.empty()) {
+                    updateData.latestVersion = GetNestedJsonValue(root, "version");
+                }
+                updateData.downloadUrl = GetNestedJsonValue(root, "auto_update_download_url");
+                updateData.autoUpdateEnabled = GetNestedJsonValue(root, "auto_update_enabled") == "true";
+                updateData.forceUpdate = GetNestedJsonValue(root, "force_update") == "true";
                 updateData.changelog.clear();
                 updateData.showReminder = false;
                 updateData.reminderMessage.clear();
@@ -1579,6 +1548,7 @@ public:
             updateData.available = GetNestedJsonValue(*updateNode, "available") == "true";
             updateData.latestVersion = GetNestedJsonValue(*updateNode, "latest_version");
             updateData.downloadUrl = GetNestedJsonValue(*updateNode, "download_url");
+            updateData.autoUpdateEnabled = GetNestedJsonValue(*updateNode, "auto_update_enabled") == "true";
             updateData.forceUpdate = GetNestedJsonValue(*updateNode, "force_update") == "true";
             updateData.changelog = GetNestedJsonValue(*updateNode, "changelog");
             updateData.showReminder = GetNestedJsonValue(*updateNode, "show_reminder") == "true";
@@ -1642,11 +1612,162 @@ public:
         }
     }
 
+    static std::vector<int> ParseSemverParts(const std::string& versionString) {
+        std::vector<int> parts;
+        std::string token;
+        token.reserve(16);
+
+        auto flush = [&]() {
+            if (token.empty()) return;
+            try {
+                parts.push_back(std::stoi(token));
+            }
+            catch (...) {
+                parts.push_back(0);
+            }
+            token.clear();
+        };
+
+        for (char c : versionString) {
+            if (c >= '0' && c <= '9') {
+                token.push_back(c);
+                continue;
+            }
+            if (c == '.') {
+                flush();
+                continue;
+            }
+            // stop parsing on first non-numeric separator (e.g. "-beta")
+            break;
+        }
+        flush();
+
+        while (parts.size() < 3) parts.push_back(0);
+        return parts;
+    }
+
+    static int CompareSemver(const std::string& a, const std::string& b) {
+        const std::vector<int> ap = ParseSemverParts(a);
+        const std::vector<int> bp = ParseSemverParts(b);
+        const size_t n = std::max(ap.size(), bp.size());
+        for (size_t i = 0; i < n; i++) {
+            const int av = i < ap.size() ? ap[i] : 0;
+            const int bv = i < bp.size() ? bp[i] : 0;
+            if (av < bv) return -1;
+            if (av > bv) return 1;
+        }
+        return 0;
+    }
+
+    bool HasWhitelistedUpdateMessage() const {
+        return updateData.showReminder || !updateData.allowedUntil.empty();
+    }
+
+    bool IsAutoUpdateEnabled() const {
+        return updateData.autoUpdateEnabled;
+    }
+
+    static std::string FormatDisplayDate(const std::string& rawDate) {
+        if (rawDate.empty()) return rawDate;
+        std::string ts = rawDate;
+        if (!ts.empty() && ts.back() == 'Z') {
+            ts.pop_back();
+        }
+        if (ts.size() >= 19) {
+            ts = ts.substr(0, 19);
+        }
+
+        std::tm tm = {};
+        std::istringstream ss(ts);
+        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+        if (ss.fail()) return rawDate;
+
+        char buffer[64];
+        if (std::strftime(buffer, sizeof(buffer), "%B %d, %Y", &tm) == 0) {
+            return rawDate;
+        }
+
+        std::string formatted = buffer;
+        size_t zeroPos = formatted.find(" 0");
+        if (zeroPos != std::string::npos) {
+            formatted.erase(zeroPos + 1, 1);
+        }
+        return formatted;
+    }
+
+    std::string BuildWhitelistedUpdateMessage() const {
+        std::string base;
+        if (!updateData.allowedUntil.empty()) {
+            base = "A new version is ready, and you can keep using this build until " + FormatDisplayDate(updateData.allowedUntil) + ".";
+        }
+        else {
+            base = "A new version is ready, and you can still use this build for now.";
+        }
+
+        if (!IsAutoUpdateEnabled()) {
+            return base;
+        }
+
+        return base + "\n\nWould you like to download the latest version now?";
+    }
+
+    static void EnsureConsole() {
+        if (GetConsoleWindow() == NULL) {
+            AllocConsole();
+        }
+
+        FILE* outputFile = nullptr;
+        FILE* inputFile = nullptr;
+        freopen_s(&outputFile, "CONOUT$", "w", stdout);
+        freopen_s(&inputFile, "CONIN$", "r", stdin);
+    }
+
+    static void OpenUrl(const std::string& url) {
+        if (url.empty()) return;
+        std::wstring wideUrl(url.begin(), url.end());
+        ShellExecuteW(NULL, L"open", wideUrl.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
+
     void OpenDownloadUrl() {
         if (!updateData.downloadUrl.empty()) {
-            std::wstring wideUrl(updateData.downloadUrl.begin(), updateData.downloadUrl.end());
-            ShellExecuteW(NULL, L"open", wideUrl.c_str(), NULL, NULL, SW_SHOWNORMAL);
+            OpenUrl(updateData.downloadUrl);
         }
+    }
+
+    void ShowRequiredUpdateConsole(const std::string& message) {
+        EnsureConsole();
+        std::cout << message << std::endl;
+        if (!updateData.latestVersion.empty()) {
+            std::cout << "Latest version: " << updateData.latestVersion << std::endl;
+        }
+
+        if (!IsAutoUpdateEnabled() || updateData.downloadUrl.empty()) {
+            return;
+        }
+
+        std::cout << "1. Download Latest" << std::endl;
+        std::cout << "2. Exit" << std::endl;
+        std::cout << "Select an option (1 or 2): ";
+
+        std::string choice;
+        std::getline(std::cin, choice);
+        if (choice == "1") {
+            OpenDownloadUrl();
+        }
+    }
+
+    void ShowWhitelistedUpdatePrompt() {
+        const std::string msg = BuildWhitelistedUpdateMessage();
+
+        if (IsAutoUpdateEnabled() && !updateData.downloadUrl.empty()) {
+            int r = MessageBoxA(NULL, msg.c_str(), "AuthlyX Update", MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST);
+            if (r == IDYES) {
+                OpenDownloadUrl();
+            }
+            return;
+        }
+
+        MessageBoxA(NULL, msg.c_str(), "AuthlyX Update", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
     }
 
     void Error(const std::string& message) {
@@ -1818,6 +1939,11 @@ static inline int AuthlyX_Authenticate(void* instance, const char* identifier, c
         deviceType ? deviceType : "") ? 1 : 0;
 }
 
+static inline int AuthlyX_ChangePassword(void* instance, const char* oldPassword, const char* newPassword) {
+    if (!instance || !oldPassword || !newPassword) return 0;
+    return reinterpret_cast<AuthlyX*>(instance)->ChangePassword(oldPassword, newPassword) ? 1 : 0;
+}
+
 static inline const char* AuthlyX_GetMessage(void* instance) {
     return instance ? reinterpret_cast<AuthlyX*>(instance)->response.message.c_str() : "";
 }
@@ -1842,6 +1968,7 @@ AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_Login(void* instance, const char* ide
 AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_LicenseLogin(void* instance, const char* licenseKey);
 AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_DeviceLogin(void* instance, const char* deviceType, const char* deviceId);
 AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_Authenticate(void* instance, const char* identifier, const char* password, const char* deviceType);
+AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_ChangePassword(void* instance, const char* oldPassword, const char* newPassword);
 AUTHLYX_EXTERN_C AUTHLYX_C_API const char* AuthlyX_GetMessage(void* instance);
 AUTHLYX_EXTERN_C AUTHLYX_C_API const char* AuthlyX_GetUsername(void* instance);
 AUTHLYX_EXTERN_C AUTHLYX_C_API const char* AuthlyX_GetLicenseKey(void* instance);

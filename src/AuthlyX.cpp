@@ -42,6 +42,11 @@ AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_Authenticate(void* instance, const ch
         deviceType ? deviceType : "") ? 1 : 0;
 }
 
+AUTHLYX_EXTERN_C AUTHLYX_C_API int AuthlyX_ChangePassword(void* instance, const char* oldPassword, const char* newPassword) {
+    if (!instance || !oldPassword || !newPassword) return 0;
+    return reinterpret_cast<AuthlyX*>(instance)->ChangePassword(oldPassword, newPassword) ? 1 : 0;
+}
+
 AUTHLYX_EXTERN_C AUTHLYX_C_API const char* AuthlyX_GetMessage(void* instance) {
     return instance ? reinterpret_cast<AuthlyX*>(instance)->response.message.c_str() : "";
 }
