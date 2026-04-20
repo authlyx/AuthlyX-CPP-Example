@@ -22,7 +22,7 @@ If you are starting fresh, use the header method first. It is the quickest setup
 ## Requirements
 
 - Windows desktop C++ project
-- C++17
+- C++14 / C++17 / C++20 / C++23
 
 Tested in this repository with:
 
