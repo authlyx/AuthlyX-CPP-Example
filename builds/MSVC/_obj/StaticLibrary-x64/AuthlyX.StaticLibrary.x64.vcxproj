@@ -45,7 +45,8 @@
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalDependencies>winhttp.lib;bcrypt.lib;iphlpapi.lib;crypt32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-  </ItemDefinitionGroup>
+
+</ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\src\AuthlyX.cpp" />
   </ItemGroup>

@@ -46,7 +46,8 @@
       <ImportLibrary>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_import\x64\AuthlyX.import.lib</ImportLibrary>
       <AdditionalDependencies>winhttp.lib;bcrypt.lib;iphlpapi.lib;crypt32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-  </ItemDefinitionGroup>
+
+</ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\src\AuthlyX.cpp" />
   </ItemGroup>
