@@ -496,10 +496,10 @@ int main() {
     std::cout << "\nInitializing AuthlyX connection..." << std::endl;
 
     AuthlyX AuthlyXApp(
-        "b49d11af8c42",
-        "TEST",
-        "1.3",
-        "1L0edLKqHlFv0AL3NIQ7uPpikN2ECr7aZSHrNWMo"
+        "",
+        "",
+        "",
+        ""
     );
 
     /*
@@ -516,7 +516,7 @@ int main() {
         std::cin.get();
         return 1;
     }
-
+    
     SetConsoleColor(FOREGROUND_GREEN);
     std::cout << "[OK] Connected Successfully!" << std::endl;
     ResetConsoleColor();
