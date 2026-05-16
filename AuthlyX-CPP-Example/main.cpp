@@ -102,7 +102,7 @@ void ShowMainMenu() {
     std::cout << "Your choice: ";
 }
 
-bool TestLogin(AuthlyX& authly) {
+bool TestLogin(AuthlyX& authlyx) {
     std::cout << "\n" << std::string(40, '-') << std::endl;
     SetConsoleColor(FOREGROUND_BLUE);
     std::cout << "LOGIN" << std::endl;
@@ -117,19 +117,19 @@ bool TestLogin(AuthlyX& authly) {
 
     std::cout << "\nAuthenticating..." << std::endl;
 
-    authly.Log("Login attempt for user: " + username);
+    authlyx.Log("Login attempt for user: " + username);
 
-    if (authly.Login(username, password)) {
-        DisplayResult("Login", authly.response);
+    if (authlyx.Login(username, password)) {
+        DisplayResult("Login", authlyx.response);
 
-        if (authly.response.success) {
-            authly.Log("User logged in successfully: " + username);
+        if (authlyx.response.success) {
+            authlyx.Log("User logged in successfully: " + username);
             return true;
         }
     }
     else {
-        DisplayResult("Login", authly.response);
-        authly.Log("Login failed for user: " + username + " - Reason: " + authly.response.message);
+        DisplayResult("Login", authlyx.response);
+        authlyx.Log("Login failed for user: " + username + " - Reason: " + authlyx.response.message);
     }
     return false;
 }
