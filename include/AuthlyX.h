@@ -973,7 +973,7 @@ private:
     std::string applicationHash;
     bool initialized = false;
     std::string serverPublicKeyPem;
-    bool requireSignedResponses = false;
+    bool requireSignedResponses = true;
     long long allowedClockSkewMs = 300000;
     std::string cachedPublicIp;
     long long cachedPublicIpExpiresAt = 0;
@@ -1047,7 +1047,7 @@ public:
         const std::string& version, const std::string& secret, bool debug = true,
         const std::string& api = DefaultBaseUrl,
         const std::string& serverPublicKeyPem = "",
-        bool requireSignedResponses = false,
+        bool requireSignedResponses = true,
         long long allowedClockSkewMs = 300000)
         : baseUrl(api.empty() ? DefaultBaseUrl : api),
         ownerId(ownerId),

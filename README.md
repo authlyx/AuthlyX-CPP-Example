@@ -250,8 +250,16 @@ Sensitive request values are masked automatically before they are written to dis
 From this folder:
 
 ```powershell
-.\builds\MSVC\build.ps1
-.\builds\MinGW\build.ps1
+.\build-msvc-mingw.ps1 -Compiler MSVC
+# or
+.\build-msvc-mingw.ps1 -Compiler MinGW
+# or
+.\build-msvc-mingw.ps1 -Compiler Both
+```
+
+*Note: If running scripts is disabled on your system, you can bypass it for this run by running:*
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-msvc-mingw.ps1 -Compiler Both
 ```
 
 ## Notes
