@@ -1,7 +1,7 @@
 ﻿#include <iostream>
 #include <string>
-#include <conio.h> 
-#include <windows.h> 
+#include <conio.h>
+
 #include "AuthlyX.h"
 
 void SetConsoleColor(WORD color) {
@@ -496,16 +496,19 @@ int main() {
     std::cout << "\nInitializing AuthlyX connection..." << std::endl;
 
     AuthlyX AuthlyXApp(
-        "",
-        "",
-        "",
-        ""
+        "12345678",
+        "Ades",
+        "1.0.0",
+        "nOUppyjWWcMKfiieUlVVL8m6HsSscOzDUQpcRJtR",
+        true,
+		"http://localhost:4000/api/v2"
     );
 
     /*
     Optional:
     - Set debug to false to disable SDK logs.
-    - Set api to your custom domain, for example: https://example.com/api/v2
+    - Set api to your custom domain, e.g. https://example.com/api/v2
+    - Set antiDebug to false to disable anti-debugger protection (useful for local testing).
     */
 
     if (!AuthlyXApp.Init()) {

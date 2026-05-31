@@ -1,4 +1,4 @@
-// AuthlyX SDK Version 2.1
+// AuthlyX SDK Version 2.2
 #pragma once
 
 #if !defined(__cplusplus)
@@ -7,14 +7,31 @@
 
 #ifdef __cplusplus
 
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+#include <windows.h>
+#include <shellapi.h>
+#include <winhttp.h>
+#include <bcrypt.h>
+#include <sddl.h>
+#include <iphlpapi.h>
+#include <wincrypt.h>
+#include <shlobj.h>
+
 #include <string>
+#include <array>
 #include <map>
 #include <vector>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <iostream>
-#include <shlobj.h>
 #include <ctime>
 #include <cmath>
 #include <chrono>
@@ -23,25 +40,20 @@
 #include <memory>
 #include <cctype>
 #include <cstring>
+#include <thread>
+#include <mutex>
 
-#define WIN32_LEAN_AND_MEAN
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <winhttp.h>
-#include <bcrypt.h>
-#include <sddl.h>
-#include <iphlpapi.h>
-#include <wincrypt.h>
 
 #ifdef max
 #undef max
 #endif
+
 #ifdef min
 #undef min
 #endif
 
+
+#pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -907,6 +919,17 @@ public:
                 std::string logFile = baseDir + "\\" + GetCurrentDate() + ".log";
                 std::string redacted = Redact(content);
 
+                const long long maxSize = 5LL * 1024 * 1024;
+                {
+                    std::ifstream checkSize(logFile, std::ios::ate | std::ios::binary);
+                    if (checkSize.tellg() > (std::streampos)maxSize) {
+                        checkSize.close();
+                        std::string archived = logFile + ".old";
+                        DeleteFileA(archived.c_str());
+                        MoveFileA(logFile.c_str(), archived.c_str());
+                    }
+                }
+
                 std::ofstream file(logFile, std::ios::app);
                 if (file) {
                     file << "[" << GetCurrentTime() << "] " << redacted << std::endl;
@@ -960,17 +983,69 @@ private:
 inline bool AuthlyLogger::Enabled = false;
 inline std::string AuthlyLogger::AppName = "AuthlyX";
 
-class AuthlyX {
+class ObfuscatedString {
+    std::vector<uint8_t> data;
+    std::array<uint8_t, 4> key = {};
+public:
+    ObfuscatedString() = default;
+    explicit ObfuscatedString(const std::string& s) {
+        BCryptGenRandom(nullptr, key.data(), static_cast<ULONG>(key.size()), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+        data.reserve(s.size());
+        for (size_t i = 0; i < s.size(); i++) data.push_back(static_cast<uint8_t>(s[i]) ^ key[i % 4]);
+    }
+    std::string get() const {
+        std::string out;
+        out.reserve(data.size());
+        for (size_t i = 0; i < data.size(); i++) out += static_cast<char>(data[i] ^ key[i % 4]);
+        return out;
+    }
+    void set(const std::string& s) {
+        SecureZeroMemory(data.data(), data.size());
+        data.clear();
+        BCryptGenRandom(nullptr, key.data(), static_cast<ULONG>(key.size()), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+        for (size_t i = 0; i < s.size(); i++) data.push_back(static_cast<uint8_t>(s[i]) ^ key[i % 4]);
+    }
+    bool empty() const { return data.empty(); }
+    ~ObfuscatedString() {
+        SecureZeroMemory(data.data(), data.size());
+        SecureZeroMemory(key.data(), key.size());
+    }
+};
+
+class GuardedBuffer {
+    void* allocation = nullptr;
+    static constexpr size_t PAGE = 4096;
+public:
+    GuardedBuffer(const std::string& data) {
+        allocation = VirtualAlloc(nullptr, PAGE * 3, MEM_COMMIT | MEM_RESERVE, PAGE_NOACCESS);
+        if (!allocation) return;
+        DWORD old;
+        VirtualProtect(static_cast<char*>(allocation) + PAGE, PAGE, PAGE_READWRITE, &old);
+        size_t len = std::min(data.size(), PAGE - 1);
+        memcpy(static_cast<char*>(allocation) + PAGE, data.data(), len);
+        VirtualProtect(static_cast<char*>(allocation) + PAGE, PAGE, PAGE_READONLY, &old);
+    }
+    ~GuardedBuffer() {
+        if (!allocation) return;
+        DWORD old;
+        VirtualProtect(static_cast<char*>(allocation) + PAGE, PAGE, PAGE_READWRITE, &old);
+        SecureZeroMemory(static_cast<char*>(allocation) + PAGE, PAGE);
+        VirtualFree(allocation, 0, MEM_RELEASE);
+    }
+};
+
+class AuthlyX final {
 private:
     static constexpr const char* DefaultBaseUrl = "https://authly.cc/api/v2";
     static constexpr const char* DefaultServerPublicKeyDerBase64 = "MCowBQYDK2VwAyEAgX5lXPhkadeQozyudzTxDXopdJxYexD5qZ0yEq9UOMU=";
     std::string baseUrl = DefaultBaseUrl;
-    std::string sessionId;
-    std::string ownerId;
+    ObfuscatedString sessionId;
+    ObfuscatedString ownerId;
     std::string appName;
     std::string version;
-    std::string secret;
+    ObfuscatedString secret;
     std::string applicationHash;
+    mutable std::mutex sessionMutex;
     bool initialized = false;
     std::string serverPublicKeyPem;
     bool requireSignedResponses = true;
@@ -1046,18 +1121,18 @@ public:
     AuthlyX(const std::string& ownerId, const std::string& appName,
         const std::string& version, const std::string& secret, bool debug = true,
         const std::string& api = DefaultBaseUrl,
-        const std::string& serverPublicKeyPem = "",
-        bool requireSignedResponses = true,
-        long long allowedClockSkewMs = 300000)
+        bool antiDebug = true)
         : baseUrl(api.empty() ? DefaultBaseUrl : api),
         ownerId(ownerId),
         appName(appName),
         version(version),
         secret(secret),
-        serverPublicKeyPem(serverPublicKeyPem.empty() ? DefaultServerPublicKeyDerBase64 : serverPublicKeyPem),
-        requireSignedResponses(requireSignedResponses),
-        allowedClockSkewMs(allowedClockSkewMs > 0 ? allowedClockSkewMs : 300000),
+        serverPublicKeyPem(DefaultServerPublicKeyDerBase64),
+        requireSignedResponses(true),
+        allowedClockSkewMs(300000),
         loggingEnabled(debug) {
+
+        if (antiDebug) CheckDebugger();
 
         if (ownerId.empty() || appName.empty() || version.empty() || secret.empty()) {
             response.success = false;
@@ -1074,11 +1149,15 @@ public:
 
 
     bool Init() {
+        if (IsDomainHijacked("authly.cc")) {
+            TerminateProcess(GetCurrentProcess(), 1);
+        }
+
         std::map<std::string, std::string> payload = {
-            {"owner_id", ownerId},
+            {"owner_id", ownerId.get()},
             {"app_name", appName},
             {"version", version},
-            {"secret", secret},
+            {"secret", secret.get()},
             {"hash", applicationHash}
         };
 
@@ -1120,11 +1199,13 @@ public:
         ParseResponse(responseStr);
 
         if (response.success) {
-            sessionId = ExtractJsonValue(responseStr, "session_id");
+            SetSessionIdSafe(ExtractJsonValue(responseStr, "session_id"));
             initialized = true;
             AuthlyLogger::Log("[INIT] Successfully initialized AuthlyX session");
 
             LoadUpdateData(responseStr);
+            StartIntegrityHeartbeat();
+            StartExeIntegrityCheck();
 
             const bool hasNewerVersion =
                 updateData.available &&
@@ -1149,12 +1230,16 @@ public:
         }
     }
 
-    bool Login(const std::string& username, const std::string& password) {
+    bool Login(std::string username, std::string password) {
         CheckInit();
-        if (!initialized) return false;
+        if (!initialized) {
+            SecureZeroMemory(const_cast<char*>(password.data()), password.size());
+            SecureZeroMemory(const_cast<char*>(username.data()), username.size());
+            return false;
+        }
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"username", username},
             {"password", password},
             {"sid", GetSystemSid()},
@@ -1164,7 +1249,14 @@ public:
         std::string responseStr = PostJson("login", BuildJson(payload));
         ParseResponse(responseStr);
 
-        return response.success;
+        bool result = response.success;
+        SecureZeroMemory(const_cast<char*>(password.data()), password.size());
+        SecureZeroMemory(const_cast<char*>(username.data()), username.size());
+        password.clear();
+        username.clear();
+
+        if (result) CheckBlacklist();
+        return result;
     }
 
     bool Login(const std::string& identifier) {
@@ -1181,13 +1273,17 @@ public:
         return Login(identifier, password);
     }
 
-    bool Register(const std::string& username, const std::string& password,
-        const std::string& key, const std::string& email = "") {
+    bool Register(std::string username, std::string password,
+        std::string key, const std::string& email = "") {
         CheckInit();
-        if (!initialized) return false;
+        if (!initialized) {
+            SecureZeroMemory(const_cast<char*>(password.data()), password.size());
+            SecureZeroMemory(const_cast<char*>(username.data()), username.size());
+            return false;
+        }
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"username", username},
             {"password", password},
             {"key", key},
@@ -1199,15 +1295,25 @@ public:
         std::string responseStr = PostJson("register", BuildJson(payload));
         ParseResponse(responseStr);
 
-        return response.success;
+        bool result = response.success;
+        SecureZeroMemory(const_cast<char*>(password.data()), password.size());
+        SecureZeroMemory(const_cast<char*>(username.data()), username.size());
+        SecureZeroMemory(const_cast<char*>(key.data()), key.size());
+        password.clear();
+        username.clear();
+        key.clear();
+        return result;
     }
 
-    bool LicenseLogin(const std::string& licenseKey) {
+    bool LicenseLogin(std::string licenseKey) {
         CheckInit();
-        if (!initialized) return false;
+        if (!initialized) {
+            SecureZeroMemory(const_cast<char*>(licenseKey.data()), licenseKey.size());
+            return false;
+        }
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"license_key", licenseKey},
             {"sid", GetSystemSid()},
             {"ip", GetPublicIp()}
@@ -1216,7 +1322,12 @@ public:
         std::string responseStr = PostJson("licenses", BuildJson(payload));
         ParseResponse(responseStr);
 
-        return response.success;
+        bool result = response.success;
+        SecureZeroMemory(const_cast<char*>(licenseKey.data()), licenseKey.size());
+        licenseKey.clear();
+
+        if (result) CheckBlacklist();
+        return result;
     }
 
     bool ExtendTime(const std::string& username, const std::string& licenseKey) {
@@ -1224,7 +1335,7 @@ public:
         if (!initialized) return false;
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"username", username},
             {"license_key", licenseKey},
             {"sid", GetSystemSid()},
@@ -1237,12 +1348,16 @@ public:
         return response.success;
     }
 
-    bool ChangePassword(const std::string& oldPassword, const std::string& newPassword) {
+    bool ChangePassword(std::string oldPassword, std::string newPassword) {
         CheckInit();
-        if (!initialized) return false;
+        if (!initialized) {
+            SecureZeroMemory(const_cast<char*>(oldPassword.data()), oldPassword.size());
+            SecureZeroMemory(const_cast<char*>(newPassword.data()), newPassword.size());
+            return false;
+        }
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"old_password", oldPassword},
             {"new_password", newPassword}
         };
@@ -1250,7 +1365,12 @@ public:
         std::string responseStr = PostJson("change-password", BuildJson(payload));
         ParseResponse(responseStr);
 
-        return response.success;
+        bool result = response.success;
+        SecureZeroMemory(const_cast<char*>(oldPassword.data()), oldPassword.size());
+        SecureZeroMemory(const_cast<char*>(newPassword.data()), newPassword.size());
+        oldPassword.clear();
+        newPassword.clear();
+        return result;
     }
 
     bool DeviceLogin(const std::string& deviceType, const std::string& deviceId) {
@@ -1258,7 +1378,7 @@ public:
         if (!initialized) return false;
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"device_type", deviceType},
             {"device_id", deviceId},
             {"sid", GetSystemSid()},
@@ -1280,7 +1400,7 @@ public:
         if (!initialized) return "";
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"var_key", varKey}
         };
 
@@ -1295,7 +1415,7 @@ public:
         if (!initialized) return false;
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"var_key", varKey},
             {"var_value", varValue}
         };
@@ -1311,7 +1431,7 @@ public:
         if (!initialized) return false;
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"message", message}
         };
 
@@ -1322,12 +1442,12 @@ public:
     }
 
     bool ValidateSession() {
-        if (!initialized || sessionId.empty()) {
+        if (!initialized || GetSessionIdSafe().empty()) {
             return false;
         }
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId}
+            {"session_id", GetSessionIdSafe()}
         };
 
         std::string responseStr = PostJson("validate-session", BuildJson(payload));
@@ -1391,33 +1511,42 @@ public:
     }
 
     std::string BuildRequestSignature(const std::string& requestId, const std::string& nonce, long long timestampMs, const std::string& canonicalBody) {
+        // HMAC-SHA256(secret, timestamp\nrequestId\nnonce\nbody)
+        std::string message = std::to_string(timestampMs) + "\n" + requestId + "\n" + nonce + "\n" + canonicalBody;
+        std::string secretStr = secret.get();
+
         BCRYPT_ALG_HANDLE algorithm = nullptr;
         BCRYPT_HASH_HANDLE hash = nullptr;
         DWORD objectLength = 0;
         DWORD cbData = 0;
         std::vector<unsigned char> objectBuffer;
         std::vector<unsigned char> digest(32);
-        std::string payload = std::to_string(timestampMs) + "\n" + requestId + "\n" + nonce + "\n" + canonicalBody + "\n" + secret;
 
-        if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0) {
+        if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, BCRYPT_ALG_HANDLE_HMAC_FLAG) != 0) {
+            SecureZeroMemory(const_cast<char*>(secretStr.data()), secretStr.size());
             return "";
         }
 
         if (BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH, reinterpret_cast<PUCHAR>(&objectLength), sizeof(objectLength), &cbData, 0) != 0) {
             BCryptCloseAlgorithmProvider(algorithm, 0);
+            SecureZeroMemory(const_cast<char*>(secretStr.data()), secretStr.size());
             return "";
         }
 
         objectBuffer.resize(objectLength);
-        if (BCryptCreateHash(algorithm, &hash, objectBuffer.data(), objectLength, nullptr, 0, 0) != 0) {
+        if (BCryptCreateHash(algorithm, &hash, objectBuffer.data(), objectLength,
+            reinterpret_cast<PUCHAR>(const_cast<char*>(secretStr.data())),
+            static_cast<ULONG>(secretStr.size()), 0) != 0) {
             BCryptCloseAlgorithmProvider(algorithm, 0);
+            SecureZeroMemory(const_cast<char*>(secretStr.data()), secretStr.size());
             return "";
         }
 
-        BCryptHashData(hash, reinterpret_cast<PUCHAR>(const_cast<char*>(payload.data())), static_cast<ULONG>(payload.size()), 0);
+        BCryptHashData(hash, reinterpret_cast<PUCHAR>(const_cast<char*>(message.data())), static_cast<ULONG>(message.size()), 0);
         BCryptFinishHash(hash, digest.data(), static_cast<ULONG>(digest.size()), 0);
         BCryptDestroyHash(hash);
         BCryptCloseAlgorithmProvider(algorithm, 0);
+        SecureZeroMemory(const_cast<char*>(secretStr.data()), secretStr.size());
         return Base64Encode(digest);
     }
 
@@ -1573,14 +1702,14 @@ public:
         response.nonce = nonce;
         response.signatureKid = signatureKid;
 
-        if (!responseRequestId.empty() && responseRequestId != requestId) {
+        if (!responseRequestId.empty() && !ConstantTimeEquals(responseRequestId, requestId)) {
             response.success = false;
             response.code = "AUTH_REQUEST_MISMATCH";
             response.message = "Response request ID does not match the original request.";
             return false;
         }
 
-        if (!responseNonce.empty() && responseNonce != nonce) {
+        if (!responseNonce.empty() && !ConstantTimeEquals(responseNonce, nonce)) {
             response.success = false;
             response.code = "AUTH_REQUEST_MISMATCH";
             response.message = "Response nonce does not match the original request.";
@@ -1638,6 +1767,10 @@ public:
     }
 
     std::string PostJson(const std::string& endpoint, const std::string& jsonPayload) {
+        if (IsDomainHijacked("authly.cc")) {
+            TerminateProcess(GetCurrentProcess(), 1);
+        }
+
         std::wstring host;
         std::wstring pathBase;
         INTERNET_PORT port = INTERNET_DEFAULT_HTTPS_PORT;
@@ -1654,7 +1787,7 @@ public:
         const std::string requestSignature = BuildRequestSignature(requestId, nonce, timestampMs, jsonPayload);
         const std::string timestampString = std::to_string(timestampMs);
 
-        HINTERNET hSession = WinHttpOpen(L"AuthlyX", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        HINTERNET hSession = WinHttpOpen(L"AuthlyX", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!hSession) {
             response.success = false;
             response.message = LastWinHttpErrorMessage("Failed to create HTTP session");
@@ -1697,30 +1830,46 @@ public:
             L"x-v2-timestamp: " + wideTimestamp + L"\r\n"
             L"x-auth-signature: " + wideSignature + L"\r\n"
             L"x-v2-signature: " + wideSignature + L"\r\n";
-        BOOL bResults = WinHttpSendRequest(hRequest, headers.c_str(), (DWORD)headers.length(),
-            (LPVOID)jsonPayload.c_str(), (DWORD)jsonPayload.length(),
-            (DWORD)jsonPayload.length(), 0);
-
-        if (!bResults) {
-            WinHttpCloseHandle(hRequest);
-            WinHttpCloseHandle(hConnect);
-            WinHttpCloseHandle(hSession);
-            response.success = false;
-            response.message = "No Internet Connection. If you have an active internet connection, please ensure your network profile is set to Public.";
-            return "";
-        }
-
-        bResults = WinHttpReceiveResponse(hRequest, NULL);
-        if (!bResults) {
-            WinHttpCloseHandle(hRequest);
-            WinHttpCloseHandle(hConnect);
-            WinHttpCloseHandle(hSession);
-            response.success = false;
-            response.message = "No Internet Connection. If you have an active internet connection, please ensure your network profile is set to Public.";
-            return "";
-        }
-
+        const int maxAttempts = 3;
+        const DWORD retryDelaysMs[2] = { 1000, 2000 };
+        BOOL bResults = FALSE;
         std::string responseStr;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            bResults = WinHttpSendRequest(hRequest, headers.c_str(), (DWORD)headers.length(),
+                (LPVOID)jsonPayload.c_str(), (DWORD)jsonPayload.length(),
+                (DWORD)jsonPayload.length(), 0);
+
+            if (!bResults) {
+                if (attempt < maxAttempts) {
+                    Sleep(retryDelaysMs[attempt - 1]);
+                    continue;
+                }
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                response.success = false;
+                response.message = "No Internet Connection. If you have an active internet connection, please ensure your network profile is set to Public.";
+                return "";
+            }
+
+            bResults = WinHttpReceiveResponse(hRequest, NULL);
+            if (!bResults) {
+                if (attempt < maxAttempts) {
+                    Sleep(retryDelaysMs[attempt - 1]);
+                    continue;
+                }
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                response.success = false;
+                response.message = "No Internet Connection. If you have an active internet connection, please ensure your network profile is set to Public.";
+                return "";
+            }
+
+            break; // success
+        }
+
         DWORD dwSize = 0;
         DWORD dwDownloaded = 0;
 
@@ -1733,6 +1882,13 @@ public:
                 responseStr.append(buffer.data(), dwDownloaded);
             }
         } while (dwSize > 0);
+
+        if (responseStr.size() >= 3 &&
+            static_cast<unsigned char>(responseStr[0]) == 0xEF &&
+            static_cast<unsigned char>(responseStr[1]) == 0xBB &&
+            static_cast<unsigned char>(responseStr[2]) == 0xBF) {
+            responseStr.erase(0, 3);
+        }
 
         DWORD statusCode = 0;
         DWORD statusCodeSize = sizeof(statusCode);
@@ -1874,7 +2030,7 @@ public:
             return cachedPublicIp;
         }
 
-        HINTERNET hSession = WinHttpOpen(L"AuthlyX/IPCheck", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        HINTERNET hSession = WinHttpOpen(L"AuthlyX/IPCheck", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
         if (!hSession) {
             return "UNKNOWN_IP";
         }
@@ -2189,7 +2345,12 @@ public:
         return value ? JsonValueToString(*value) : "";
     }
 
-    void ParseResponse(const std::string& jsonResponse) {
+    void ParseResponse(const std::string& rawJsonResponse) {
+        const std::string jsonResponse = (rawJsonResponse.size() >= 3 &&
+            static_cast<unsigned char>(rawJsonResponse[0]) == 0xEF &&
+            static_cast<unsigned char>(rawJsonResponse[1]) == 0xBB &&
+            static_cast<unsigned char>(rawJsonResponse[2]) == 0xBF)
+            ? rawJsonResponse.substr(3) : rawJsonResponse;
         response.raw = jsonResponse;
 
         if (jsonResponse.empty()) {
@@ -2272,6 +2433,9 @@ public:
         setIfPresent(userData.registeredAt, getObjectValue("user", "registered_at"));
 
         setIfPresent(userData.licenseKey, getObjectValue("license", "license_key"));
+        if (userData.username.empty()) {
+            setIfPresent(userData.username, getObjectValue("license", "license_key"));
+        }
         setIfPresent(userData.email, getObjectValue("license", "email"));
         setIfPresent(userData.subscription, getObjectValue("license", "subscription"));
         setIfPresent(userData.subscriptionLevel, getObjectValue("license", "subscription_level"));
@@ -2667,8 +2831,20 @@ public:
     void Error(const std::string& message) {
         AuthlyLogger::Log("[ERROR] " + message);
 
+        // Strip cmd.exe metacharacters to prevent command injection from server-controlled input
+        std::string safe;
+        safe.reserve(message.size());
+        for (char c : message) {
+            if (c == '"' || c == '&' || c == '|' || c == '<' || c == '>' ||
+                c == '^' || c == '%' || c == '!' || c == ';' || c == '(' || c == ')') {
+                safe += ' ';
+            } else {
+                safe += c;
+            }
+        }
+
         std::string cmd = "cmd.exe /c start cmd /C \"color 4 && title AuthlyX Error && echo " +
-            message + " && timeout /t 5\"";
+            safe + " && timeout /t 5\"";
 
         STARTUPINFOA si = { sizeof(si) };
         PROCESS_INFORMATION pi;
@@ -2699,7 +2875,7 @@ public:
         return days < 0 ? 0 : days;
     }
 
-    std::string GetSessionId() const { return sessionId; }
+    std::string GetSessionId() const { return GetSessionIdSafe(); }
     std::string GetCurrentApplicationHash() const { return applicationHash; }
     bool IsInitialized() const { return initialized; }
     std::string GetAppName() const { return appName; }
@@ -2717,7 +2893,7 @@ public:
         if (channelName.empty()) return "Channel cannot be empty";
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"channel_name", channelName},
             {"limit", std::to_string(limit > 0 ? limit : 100)}
         };
@@ -2739,7 +2915,7 @@ public:
         if (message.empty() || channelName.empty()) return;
 
         std::map<std::string, std::string> payload = {
-            {"session_id", sessionId},
+            {"session_id", GetSessionIdSafe()},
             {"channel_name", channelName},
             {"message", message}
         };
@@ -2752,10 +2928,19 @@ private:
         std::string json = "{";
         for (auto it = data.begin(); it != data.end(); ++it) {
             if (it != data.begin()) json += ",";
-            json += "\"" + it->first + "\":\"" + EscapeJsonString(it->second) + "\"";
+            json += "\"" + it->first + "\":\"" + EscapeJsonString(SanitizeValue(it->second)) + "\"";
         }
         json += "}";
         return json;
+    }
+
+    std::string SanitizeValue(const std::string& input, size_t maxLen = 2048) const {
+        std::string result;
+        result.reserve(std::min(input.size(), maxLen));
+        for (size_t i = 0; i < input.size() && i < maxLen; i++) {
+            if (input[i] != 0) result += input[i];
+        }
+        return result;
     }
 
     std::string EscapeJsonString(const std::string& input) const {
@@ -2776,6 +2961,109 @@ private:
     }
 
     bool loggingEnabled = false;
+
+    static bool IsDomainHijacked(const std::string& domain) {
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2, 2), &wsaData);
+        struct addrinfo hints = {}, *result = nullptr;
+        hints.ai_family = AF_UNSPEC;
+        if (getaddrinfo(domain.c_str(), nullptr, &hints, &result) != 0) {
+            WSACleanup();
+            return true;
+        }
+        bool hijacked = false;
+        for (auto* p = result; p; p = p->ai_next) {
+            if (p->ai_family == AF_INET) {
+                unsigned long ip = ntohl(((sockaddr_in*)p->ai_addr)->sin_addr.s_addr);
+                if ((ip >> 24) == 127 || (ip >> 24) == 10 ||
+                    (ip >> 16) == 0xC0A8 || ((ip >> 20) == 0xAC1)) {
+                    hijacked = true;
+                    break;
+                }
+            }
+        }
+        freeaddrinfo(result);
+        WSACleanup();
+        return hijacked;
+    }
+
+    static void CheckDebugger() {
+        if (IsDebuggerPresent()) {
+            TerminateProcess(GetCurrentProcess(), 1);
+        }
+        BOOL remote = FALSE;
+        CheckRemoteDebuggerPresent(GetCurrentProcess(), &remote);
+        if (remote) {
+            TerminateProcess(GetCurrentProcess(), 1);
+        }
+    }
+
+    void StartIntegrityHeartbeat() {
+        std::string name = "AuthlyX_" + applicationHash.substr(0, std::min<size_t>(16, applicationHash.size()));
+        HANDLE hMutex = CreateMutexA(nullptr, TRUE, name.c_str());
+        std::thread([hMutex]() {
+            while (true) {
+                Sleep(60000);
+                CheckDebugger();
+                if (WaitForSingleObject(hMutex, 0) != WAIT_TIMEOUT)
+                    TerminateProcess(GetCurrentProcess(), 1);
+            }
+        }).detach();
+    }
+
+    void StartExeIntegrityCheck() {
+        std::string originalHash = applicationHash;
+        std::thread([this, originalHash]() {
+            while (true) {
+                Sleep(120000);
+                CalculateApplicationHash();
+                if (applicationHash != originalHash)
+                    TerminateProcess(GetCurrentProcess(), 1);
+            }
+        }).detach();
+    }
+
+    bool CheckBlacklist() {
+        CheckInit();
+        if (!initialized) return true;
+
+        std::map<std::string, std::string> payload = {
+            {"session_id", GetSessionIdSafe()},
+            {"hwid", GetSystemSid()},
+            {"ip", GetPublicIp()}
+        };
+
+        std::string responseStr = PostJson("blacklist/check", BuildJson(payload));
+        ParseResponse(responseStr);
+        return response.success && ExtractJsonValue(responseStr, "blacklisted") == "true";
+    }
+
+    static void ErasePeHeader() {
+        LPVOID base = GetModuleHandle(nullptr);
+        DWORD oldProtect = 0;
+        if (VirtualProtect(base, 4096, PAGE_READWRITE, &oldProtect)) {
+            SecureZeroMemory(base, 4096);
+            VirtualProtect(base, 4096, PAGE_READONLY, &oldProtect);
+        }
+    }
+
+    static bool ConstantTimeEquals(const std::string& a, const std::string& b) {
+        if (a.size() != b.size()) return false;
+        return AuthlyXTweetNaCl::vn(
+            reinterpret_cast<const AuthlyXTweetNaCl::u8*>(a.data()),
+            reinterpret_cast<const AuthlyXTweetNaCl::u8*>(b.data()),
+            static_cast<int>(a.size())) == 0;
+    }
+
+    std::string GetSessionIdSafe() const {
+        std::lock_guard<std::mutex> lock(sessionMutex);
+        return sessionId.get();
+    }
+
+    void SetSessionIdSafe(const std::string& id) {
+        std::lock_guard<std::mutex> lock(sessionMutex);
+        sessionId.set(id);
+    }
 };
 
 #endif // __cplusplus

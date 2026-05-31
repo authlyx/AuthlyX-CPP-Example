@@ -7,7 +7,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{18740979-98DE-4250-9E73-4D3152AF18F6}</ProjectGuid>
+    <ProjectGuid>{B7E6874F-6A2B-4280-8403-50237A0B4AE8}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <ProjectName>AuthlyXDynamicLibraryWin32</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
