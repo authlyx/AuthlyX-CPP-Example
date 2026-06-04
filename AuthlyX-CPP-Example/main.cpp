@@ -496,12 +496,10 @@ int main() {
     std::cout << "\nInitializing AuthlyX connection..." << std::endl;
 
     AuthlyX AuthlyXApp(
-        "12345678",
-        "Ades",
-        "1.0.0",
-        "nOUppyjWWcMKfiieUlVVL8m6HsSscOzDUQpcRJtR",
-        true,
-		"http://localhost:4000/api/v2"
+        "",
+        "",
+        "",
+        "",
     );
 
     /*
