@@ -37,7 +37,7 @@ void DisplayResult(const std::string& operation, const AuthlyX::Response& respon
     std::cout << "\n" << std::string(30, '-') << std::endl;
     if (response.success) {
         SetConsoleColor(FOREGROUND_GREEN);
-        std::cout << "[OK] " << operation << " SUCCESS" << std::endl;
+        std::cout << operation << " SUCCESS" << std::endl;
         ResetConsoleColor();
         std::cout << "Message: " << response.message << std::endl;
     }
@@ -178,7 +178,7 @@ bool TestRegister(AuthlyX& authly) {
     return false;
 }
 
-bool TestLicenseLogin(AuthlyX& authly) {
+bool TestLicenseLogin(AuthlyX& authlyx) {
     std::cout << "\n" << std::string(40, '-') << std::endl;
     SetConsoleColor(FOREGROUND_BLUE);
     std::cout << "LICENSE LOGIN" << std::endl;
@@ -190,19 +190,19 @@ bool TestLicenseLogin(AuthlyX& authly) {
 
     std::cout << "\nAuthenticating with license..." << std::endl;
 
-    authly.Log("License login attempt with key: " + licenseKey.substr(0, 8) + "...");
+    authlyx.Log("License login attempt with key: " + licenseKey.substr(0, 8) + "...");
 
-    if (authly.Authenticate(licenseKey)) {
-        DisplayResult("License Login", authly.response);
+    if (authlyx.Authenticate(licenseKey)) {
+        DisplayResult("License Login", authlyx.response);
 
-        if (authly.response.success) {
-            authly.Log("License login successful for key: " + licenseKey.substr(0, 8) + "...");
+        if (authlyx.response.success) {
+            authlyx.Log("License login successful for key: " + licenseKey.substr(0, 8) + "...");
             return true;
         }
     }
     else {
-        DisplayResult("License Login", authly.response);
-        authly.Log("License login failed for key: " + licenseKey.substr(0, 8) + "... - Reason: " + authly.response.message);
+        DisplayResult("License Login", authlyx.response);
+        authlyx.Log("License login failed for key: " + licenseKey.substr(0, 8) + "... - Reason: " + authlyx.response.message);
     }
     return false;
 }
@@ -499,7 +499,7 @@ int main() {
         "",
         "",
         "",
-        "",
+        ""
     );
 
     /*
@@ -519,7 +519,7 @@ int main() {
     }
     
     SetConsoleColor(FOREGROUND_GREEN);
-    std::cout << "[OK] Connected Successfully!" << std::endl;
+    std::cout << "Connected Successfully!" << std::endl;
     ResetConsoleColor();
 
     AuthlyXApp.Log("C++ Application started successfully");

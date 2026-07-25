@@ -7,7 +7,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{1EB9266C-3525-4B27-8C18-9FBF93D2FA30}</ProjectGuid>
+    <ProjectGuid>{A5323FB8-1B73-4A5D-ACB9-CA67DDADB16F}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <ProjectName>AuthlyXStaticLibraryWin32</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>

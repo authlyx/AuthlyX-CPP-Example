@@ -1,4 +1,4 @@
-// AuthlyX SDK Version 2.2
+// AuthlyX SDK Version 2.3
 #pragma once
 
 #if !defined(__cplusplus)
@@ -1158,7 +1158,8 @@ public:
             {"app_name", appName},
             {"version", version},
             {"secret", secret.get()},
-            {"hash", applicationHash}
+            {"hash", applicationHash},
+            {"ip", GetPublicIp()}
         };
 
         std::string responseStr = PostJson("init", BuildJson(payload));
@@ -1511,7 +1512,6 @@ public:
     }
 
     std::string BuildRequestSignature(const std::string& requestId, const std::string& nonce, long long timestampMs, const std::string& canonicalBody) {
-        // HMAC-SHA256(secret, timestamp\nrequestId\nnonce\nbody)
         std::string message = std::to_string(timestampMs) + "\n" + requestId + "\n" + nonce + "\n" + canonicalBody;
         std::string secretStr = secret.get();
 
@@ -1867,7 +1867,7 @@ public:
                 return "";
             }
 
-            break; // success
+            break;
         }
 
         DWORD dwSize = 0;
@@ -2379,7 +2379,31 @@ public:
             response.message = response.success ? "Success" : "Unknown error";
         }
 
-        LoadUserData(jsonResponse);
+        bool hasUserData = false;
+        if (root.type == JsonValue::Type::Object) {
+            if (root.objectValue.find("license") != root.objectValue.end()) {
+                hasUserData = true;
+            }
+
+            if (!hasUserData) {
+                const std::vector<std::string> userFields = {
+                    "username", "email", "license_key", "subscription",
+                    "expiry_date", "days_left", "last_login", "registered_at",
+                    "session_id", "owner_id"
+                };
+                for (const auto& field : userFields) {
+                    if (root.objectValue.find(field) != root.objectValue.end()) {
+                        hasUserData = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (hasUserData) {
+            LoadUserData(jsonResponse);
+        }
+
         LoadVariableData(jsonResponse);
         LoadUpdateData(jsonResponse);
         LoadChatData(jsonResponse);
@@ -2390,17 +2414,17 @@ public:
         const bool parsed = ParseJsonDocument(jsonResponse, root);
 
         auto setIfPresent = [](std::string& target, const std::string& value) {
-            if (!value.empty()) {
+            if (!value.empty() && value != "null") {
                 target = value;
             }
             };
 
-        auto getObjectValue = [&](const std::string& objectName, const std::string& key) -> std::string {
+        auto getFromObject = [&](const std::string& objName, const std::string& key) -> std::string {
             if (!parsed || root.type != JsonValue::Type::Object) {
                 return "";
             }
 
-            auto objectIt = root.objectValue.find(objectName);
+            auto objectIt = root.objectValue.find(objName);
             if (objectIt == root.objectValue.end() || objectIt->second.type != JsonValue::Type::Object) {
                 return "";
             }
@@ -2410,121 +2434,131 @@ public:
                 return "";
             }
 
-            return JsonValueToString(valueIt->second);
+            const JsonValue& val = valueIt->second;
+            switch (val.type) {
+            case JsonValue::Type::String:
+            case JsonValue::Type::Number:
+                return val.stringValue;
+            case JsonValue::Type::Bool:
+                return val.boolValue ? "true" : "false";
+            default:
+                return "";
+            }
             };
 
-        setIfPresent(userData.username, ExtractJsonValue(jsonResponse, "username"));
-        setIfPresent(userData.email, ExtractJsonValue(jsonResponse, "email"));
-        setIfPresent(userData.licenseKey, ExtractJsonValue(jsonResponse, "license_key"));
-        setIfPresent(userData.subscription, ExtractJsonValue(jsonResponse, "subscription"));
-        setIfPresent(userData.subscriptionLevel, ExtractJsonValue(jsonResponse, "subscription_level"));
-        setIfPresent(userData.lastLogin, ExtractJsonValue(jsonResponse, "last_login"));
-        setIfPresent(userData.registeredAt, ExtractJsonValue(jsonResponse, "registered_at"));
-        if (userData.registeredAt.empty()) {
-            setIfPresent(userData.registeredAt, ExtractJsonValue(jsonResponse, "created_at"));
+        auto getFromRoot = [&](const std::string& key) -> std::string {
+            if (!parsed || root.type != JsonValue::Type::Object) {
+                return "";
+            }
+            auto it = root.objectValue.find(key);
+            if (it == root.objectValue.end()) {
+                return "";
+            }
+            const JsonValue& val = it->second;
+            switch (val.type) {
+            case JsonValue::Type::String:
+            case JsonValue::Type::Number:
+                return val.stringValue;
+            case JsonValue::Type::Bool:
+                return val.boolValue ? "true" : "false";
+            default:
+                return "";
+            }
+            };
+
+        std::string licenseKey = getFromObject("license", "license_key");
+        std::string email = getFromObject("license", "email");
+        std::string subscription = getFromObject("license", "subscription");
+        std::string subscriptionLevel = getFromObject("license", "subscription_level");
+        std::string lastLogin = getFromObject("license", "last_login");
+        std::string registeredAt = getFromObject("license", "registered_at");
+        std::string rawDate = getFromObject("license", "expiry_date");
+        std::string rawDaysLeft = getFromObject("license", "days_left");
+        std::string hwid = getFromObject("license", "sid");
+        std::string ipAddress = getFromObject("license", "ip_address");
+        if (hwid.empty()) {
+            hwid = getFromObject("license", "hwid");
+        }
+        if (licenseKey.empty()) {
+            licenseKey = getFromRoot("license_key");
+        }
+        if (email.empty()) {
+            email = getFromRoot("email");
+        }
+        if (subscription.empty()) {
+            subscription = getFromRoot("subscription");
+        }
+        if (subscriptionLevel.empty()) {
+            subscriptionLevel = getFromRoot("subscription_level");
+        }
+        if (lastLogin.empty()) {
+            lastLogin = getFromRoot("last_login");
+        }
+        if (registeredAt.empty()) {
+            registeredAt = getFromRoot("registered_at");
+            if (registeredAt.empty()) {
+                registeredAt = getFromRoot("created_at");
+            }
+        }
+        if (rawDate.empty()) {
+            rawDate = getFromRoot("expiry_date");
+        }
+        if (rawDaysLeft.empty()) {
+            rawDaysLeft = getFromRoot("days_left");
+        }
+        if (hwid.empty()) {
+            hwid = getFromRoot("sid");
+            if (hwid.empty()) {
+                hwid = getFromRoot("hwid");
+            }
+        }
+        if (ipAddress.empty()) {
+            ipAddress = getFromRoot("ip_address");
+        }
+        if (ipAddress.empty()) {
+            ipAddress = getFromRoot("ip");
+        }
+        if (ipAddress.empty()) {
+            ipAddress = getFromObject("user", "ip_address");
+        }
+        if (ipAddress.empty()) {
+            ipAddress = getFromObject("device", "ip_address");
+        }
+        if (ipAddress.empty()) {
+            ipAddress = GetPublicIp();
         }
 
-        setIfPresent(userData.username, getObjectValue("user", "username"));
-        setIfPresent(userData.email, getObjectValue("user", "email"));
-        setIfPresent(userData.subscription, getObjectValue("user", "subscription"));
-        setIfPresent(userData.subscriptionLevel, getObjectValue("user", "subscription_level"));
-        setIfPresent(userData.licenseKey, getObjectValue("user", "linked_license_key"));
-        setIfPresent(userData.lastLogin, getObjectValue("user", "last_login"));
-        setIfPresent(userData.registeredAt, getObjectValue("user", "registered_at"));
 
-        setIfPresent(userData.licenseKey, getObjectValue("license", "license_key"));
+        setIfPresent(userData.licenseKey, licenseKey);
+        setIfPresent(userData.email, email);
+        setIfPresent(userData.subscription, subscription);
+        setIfPresent(userData.subscriptionLevel, subscriptionLevel);
+        setIfPresent(userData.lastLogin, lastLogin);
+        setIfPresent(userData.registeredAt, registeredAt);
+        setIfPresent(userData.hwid, hwid);
+        setIfPresent(userData.ipAddress, ipAddress);
+
         if (userData.username.empty()) {
-            setIfPresent(userData.username, getObjectValue("license", "license_key"));
-        }
-        setIfPresent(userData.email, getObjectValue("license", "email"));
-        setIfPresent(userData.subscription, getObjectValue("license", "subscription"));
-        setIfPresent(userData.subscriptionLevel, getObjectValue("license", "subscription_level"));
-        setIfPresent(userData.lastLogin, getObjectValue("license", "last_login"));
-        setIfPresent(userData.registeredAt, getObjectValue("license", "registered_at"));
-
-        setIfPresent(userData.email, getObjectValue("device", "email"));
-        setIfPresent(userData.subscription, getObjectValue("device", "subscription"));
-        if (userData.subscription.empty()) {
-            setIfPresent(userData.subscription, getObjectValue("device", "subscription_name"));
-        }
-        setIfPresent(userData.subscriptionLevel, getObjectValue("device", "subscription_level"));
-        setIfPresent(userData.lastLogin, getObjectValue("device", "last_login"));
-        setIfPresent(userData.registeredAt, getObjectValue("device", "registered_at"));
-        if (userData.registeredAt.empty()) {
-            setIfPresent(userData.registeredAt, getObjectValue("device", "date_created"));
-        }
-
-        std::string rawDate = ExtractJsonValue(jsonResponse, "expiry_date");
-        if (rawDate.empty()) {
-            rawDate = getObjectValue("user", "expiry_date");
-        }
-        if (rawDate.empty()) {
-            rawDate = getObjectValue("license", "expiry_date");
-        }
-        if (rawDate.empty()) {
-            rawDate = getObjectValue("device", "expiry_date");
+            setIfPresent(userData.username, licenseKey);
         }
 
         if (!rawDate.empty()) {
-            std::tm tm = {};
-            std::istringstream ss(rawDate.substr(0, 19));
-            ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
-
-            if (!ss.fail()) {
-                char buffer[64];
-                std::strftime(buffer, sizeof(buffer), "%d/%m/%Y", &tm);
-                userData.expiryDate = std::string(buffer);
-            }
-            else {
-                userData.expiryDate = rawDate;
-            }
+            userData.expiryDate = rawDate;
         }
         else {
             userData.expiryDate.clear();
         }
 
-        userData.daysLeft = ComputeDaysLeft(rawDate);
-        userData.hwid = ExtractJsonValue(jsonResponse, "sid");
-        if (userData.hwid.empty()) {
-            userData.hwid = ExtractJsonValue(jsonResponse, "hwid");
+        if (!rawDaysLeft.empty()) {
+            try {
+                userData.daysLeft = std::stoi(rawDaysLeft);
+            }
+            catch (...) {
+                userData.daysLeft = 0;
+            }
         }
-        if (userData.hwid.empty()) {
-            userData.hwid = getObjectValue("user", "sid");
-        }
-        if (userData.hwid.empty()) {
-            userData.hwid = getObjectValue("user", "hwid");
-        }
-        if (userData.hwid.empty()) {
-            userData.hwid = getObjectValue("license", "sid");
-        }
-        if (userData.hwid.empty()) {
-            userData.hwid = getObjectValue("license", "hwid");
-        }
-        if (userData.hwid.empty()) {
-            userData.hwid = getObjectValue("device", "sid");
-        }
-        if (userData.hwid.empty()) {
-            userData.hwid = getObjectValue("device", "hwid");
-        }
-        if (userData.hwid.empty()) {
-            userData.hwid = GetSystemSid();
-        }
-
-        userData.ipAddress = ExtractJsonValue(jsonResponse, "ip_address");
-        if (userData.ipAddress.empty()) {
-            userData.ipAddress = ExtractJsonValue(jsonResponse, "ip");
-        }
-        if (userData.ipAddress.empty()) {
-            userData.ipAddress = getObjectValue("user", "ip_address");
-        }
-        if (userData.ipAddress.empty()) {
-            userData.ipAddress = getObjectValue("license", "ip_address");
-        }
-        if (userData.ipAddress.empty()) {
-            userData.ipAddress = getObjectValue("device", "ip_address");
-        }
-        if (userData.ipAddress.empty()) {
-            userData.ipAddress = GetPublicIp();
+        else {
+            userData.daysLeft = 0;
         }
 
         if (userData.subscriptionLevel.empty()) {
@@ -2723,7 +2757,7 @@ public:
 
         std::tm tm = {};
         std::istringstream ss(ts);
-        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
         if (ss.fail()) return rawDate;
 
         char buffer[64];
@@ -2831,7 +2865,6 @@ public:
     void Error(const std::string& message) {
         AuthlyLogger::Log("[ERROR] " + message);
 
-        // Strip cmd.exe metacharacters to prevent command injection from server-controlled input
         std::string safe;
         safe.reserve(message.size());
         for (char c : message) {
@@ -2865,7 +2898,7 @@ public:
         }
         std::tm tm = {};
         std::istringstream ss(ts);
-        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
         if (ss.fail()) return 0;
         time_t expiry = _mkgmtime(&tm);
         if (expiry <= 0) return 0;
@@ -3066,7 +3099,7 @@ private:
     }
 };
 
-#endif // __cplusplus
+#endif
 
 #ifndef AUTHLYX_C_API_DECL
 #define AUTHLYX_C_API_DECL

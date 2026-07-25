@@ -16,9 +16,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\AuthlyX.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\AuthlyX.h">
       <Filter>Header Files</Filter>
     </ClInclude>
