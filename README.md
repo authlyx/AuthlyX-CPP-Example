@@ -1,7 +1,5 @@
 # AuthlyX C++ SDK
 
-AuthlyX for C++ is built for native Windows applications that need a straightforward way to talk to the AuthlyX API.
-
 This folder includes:
 
 - the SDK header
@@ -245,25 +243,5 @@ AuthlyX AuthlyXApp(
 
 Sensitive request values are masked automatically before they are written to disk.
 
-## Rebuilding the SDK
-
-From this folder:
-
-```powershell
-.\build-msvc-mingw.ps1 -Compiler MSVC
-# or
-.\build-msvc-mingw.ps1 -Compiler MinGW
-# or
-.\build-msvc-mingw.ps1 -Compiler Both
-```
-
-*Note: If running scripts is disabled on your system, you can bypass it for this run by running:*
-```powershell
-powershell -ExecutionPolicy Bypass -File .\build-msvc-mingw.ps1 -Compiler Both
-```
-
-## Notes
-
-- Do not mix MSVC binaries with MinGW projects.
-- Do not mix MinGW binaries with MSVC projects.
+## Note
 - If you only need the class-based SDK, `AuthlyX.h` is usually the best choice.
