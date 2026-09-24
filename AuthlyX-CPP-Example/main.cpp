@@ -496,10 +496,10 @@ int main() {
     std::cout << "\nInitializing AuthlyX connection..." << std::endl;
 
     AuthlyX AuthlyXApp(
-        "",
-        "",
-        "",
-        ""
+        "b49d11af8c42",
+        "TEST",
+        "1.1",
+        "1L0edLKqHlFv0AL3NIQ7uPpikN2ECr7aZSHrNWMo"
     );
 
     /*
@@ -520,9 +520,9 @@ int main() {
     
     SetConsoleColor(FOREGROUND_GREEN);
     std::cout << "Connected Successfully!" << std::endl;
+    AuthlyXApp.Log("Connected Successfully!");//Now that this is done let's test it
     ResetConsoleColor();
 
-    AuthlyXApp.Log("C++ Application started successfully");
 
     bool running = true;
     bool loggedIn = false;
@@ -547,7 +547,6 @@ int main() {
             }
             else if (choice == "0") {
                 running = false;
-                AuthlyXApp.Log("C++ Application exiting");
                 std::cout << "Thank you for using AuthlyX!" << std::endl;
             }
             else {
@@ -586,14 +585,12 @@ int main() {
             else if (choice == "9") {
                 loggedIn = false;
                 ClearUserData(AuthlyXApp);
-                AuthlyXApp.Log("User logged out");
                 SetConsoleColor(FOREGROUND_RED);
                 std::cout << "Logged out successfully. Returning to login menu." << std::endl;
                 ResetConsoleColor();
             }
             else if (choice == "0") {
                 running = false;
-                AuthlyXApp.Log("C++ Application exiting");
                 std::cout << "Thank you for using AuthlyX!" << std::endl;
             }
             else {

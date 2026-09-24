@@ -1,4 +1,4 @@
-// AuthlyX SDK Version 2.3
+// AuthlyX SDK V2.4
 #pragma once
 
 #if !defined(__cplusplus)
@@ -1767,6 +1767,89 @@ public:
         return true;
     }
 
+    static bool ValidatePinnedChain(PCCERT_CONTEXT certificate, const wchar_t* host) {
+        if (!certificate) return false;
+        CERT_CHAIN_PARA parameters = {};
+        parameters.cbSize = sizeof(parameters);
+        PCCERT_CHAIN_CONTEXT chain = nullptr;
+        if (!CertGetCertificateChain(nullptr, certificate, nullptr, certificate->hCertStore,
+            &parameters, CERT_CHAIN_CACHE_ONLY_URL_RETRIEVAL, nullptr, &chain)) return false;
+        SSL_EXTRA_CERT_CHAIN_POLICY_PARA sslPolicy = {};
+        sslPolicy.cbSize = sizeof(sslPolicy);
+        sslPolicy.dwAuthType = AUTHTYPE_SERVER;
+        sslPolicy.pwszServerName = const_cast<wchar_t*>(host);
+        CERT_CHAIN_POLICY_PARA policy = {};
+        policy.cbSize = sizeof(policy);
+        policy.pvExtraPolicyPara = &sslPolicy;
+        CERT_CHAIN_POLICY_STATUS status = {};
+        status.cbSize = sizeof(status);
+        bool valid = CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_SSL, chain, &policy, &status) &&
+            status.dwError == 0 && chain->TrustStatus.dwErrorStatus == CERT_TRUST_NO_ERROR;
+        bool matched = valid && ChainHasPinnedCertificate(chain);
+        CertFreeCertificateChain(chain);
+        return matched;
+    }
+
+    static bool ChainHasPinnedCertificate(PCCERT_CHAIN_CONTEXT chain) {
+        if (!chain) return false;
+        bool matched = false;
+        BCRYPT_ALG_HANDLE algorithm = nullptr;
+        if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0) {
+
+            for (DWORD i = 0; i < chain->cChain && !matched; ++i) {
+                for (DWORD j = 0; j < chain->rgpChain[i]->cElement && !matched; ++j) {
+                    PCCERT_CONTEXT cert = chain->rgpChain[i]->rgpElement[j]->pCertContext;
+                    BCRYPT_HASH_HANDLE hash = nullptr;
+                    DWORD objectSize = 0, returned = 0;
+                    if (BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH, reinterpret_cast<PUCHAR>(&objectSize),
+                        sizeof(objectSize), &returned, 0) != 0) continue;
+                    std::vector<UCHAR> object(objectSize);
+                    UCHAR digest[32] = {};
+                    if (BCryptCreateHash(algorithm, &hash, object.data(), objectSize, nullptr, 0, 0) != 0) continue;
+                    bool hashed = BCryptHashData(hash, cert->pbCertEncoded, cert->cbCertEncoded, 0) == 0 &&
+                        BCryptFinishHash(hash, digest, sizeof(digest), 0) == 0;
+                    BCryptDestroyHash(hash);
+                    if (hashed) {
+                        const char* hex = "0123456789ABCDEF";
+                        char fingerprint[65] = {};
+                        for (size_t k = 0; k < sizeof(digest); ++k) {
+                            fingerprint[2 * k] = hex[digest[k] >> 4];
+                            fingerprint[2 * k + 1] = hex[digest[k] & 15];
+                        }
+                        matched = std::strcmp(fingerprint, "1DFC1605FBAD358D8BC844F76D15203FAC9CA5C1A79FD4857FFAF2864FBEBF96") == 0 ||
+                            std::strcmp(fingerprint, "76B27B80A58027DC3CF1DA68DAC17010ED93997D0B603E2FADBE85012493B5A7") == 0;
+                    }
+                }
+            }
+            BCryptCloseAlgorithmProvider(algorithm, 0);
+        }
+        return matched;
+    }
+
+    struct PinRequestState {
+        const wchar_t* host;
+        bool rejected = false;
+    };
+
+    static void CALLBACK PinnedRequestCallback(HINTERNET request, DWORD_PTR context,
+        DWORD notification, LPVOID, DWORD) {
+        if (notification != WINHTTP_CALLBACK_STATUS_SENDING_REQUEST || !context) return;
+        auto* state = reinterpret_cast<PinRequestState*>(context);
+        PCCERT_CONTEXT certificate = nullptr;
+        DWORD size = sizeof(certificate);
+        bool valid = false;
+        try {
+            valid = WinHttpQueryOption(request, WINHTTP_OPTION_SERVER_CERT_CONTEXT, &certificate, &size) &&
+                ValidatePinnedChain(certificate, state->host);
+        } catch (...) { valid = false; }
+        if (certificate) CertFreeCertificateContext(certificate);
+        if (!valid) {
+            state->rejected = true;
+
+            WinHttpCloseHandle(request);
+        }
+    }
+
     std::string PostJson(const std::string& endpoint, const std::string& jsonPayload) {
         if (IsDomainHijacked("authly.cc")) {
             TerminateProcess(GetCurrentProcess(), 1);
@@ -1782,6 +1865,13 @@ public:
             return "";
         }
 
+        const bool pinHost = _wcsicmp(host.c_str(), L"authly.cc") == 0 ||
+            _wcsicmp(host.c_str(), L"authly.cc.") == 0;
+        if (pinHost && !secure) {
+            response.success = false;
+            response.message = "AuthlyX requires HTTPS";
+            return "";
+        }
         const std::string requestId = GenerateHex(16);
         const std::string nonce = GenerateHex(16);
         const long long timestampMs = GetTimestampMs();
@@ -1820,6 +1910,19 @@ public:
             return "";
         }
 
+        PinRequestState pinState{ host.c_str() };
+        DWORD redirectPolicy = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+        if (!WinHttpSetOption(hRequest, WINHTTP_OPTION_REDIRECT_POLICY, &redirectPolicy, sizeof(redirectPolicy)) ||
+            (pinHost && WinHttpSetStatusCallback(hRequest, PinnedRequestCallback,
+                WINHTTP_CALLBACK_STATUS_SENDING_REQUEST, 0) == WINHTTP_INVALID_STATUS_CALLBACK)) {
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            response.success = false;
+            response.message = "Cannot configure AuthlyX TLS pinning";
+            return "";
+        }
+
         std::wstring headers =
             L"Content-Type: application/json\r\n"
             L"Accept: application/json\r\n"
@@ -1839,7 +1942,17 @@ public:
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             bResults = WinHttpSendRequest(hRequest, headers.c_str(), (DWORD)headers.length(),
                 (LPVOID)jsonPayload.c_str(), (DWORD)jsonPayload.length(),
-                (DWORD)jsonPayload.length(), 0);
+                (DWORD)jsonPayload.length(), reinterpret_cast<DWORD_PTR>(&pinState));
+
+            if (pinState.rejected) {
+
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                response.success = false;
+                response.code = "TLS_PIN_MISMATCH";
+                response.message = "AuthlyX TLS certificate chain does not match a trusted pin";
+                return "";
+            }
 
             if (!bResults) {
                 if (attempt < maxAttempts) {

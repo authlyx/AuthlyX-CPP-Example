@@ -7,7 +7,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{89C2F0DF-B820-42A5-B1EF-E209479D3B00}</ProjectGuid>
+    <ProjectGuid>{A9228AE4-0477-4FF8-8FA1-4021FFCE9FE9}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <ProjectName>AuthlyXStaticLibraryx64</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
@@ -22,8 +22,8 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\x64\</OutDir>
-    <IntDir>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\StaticLibrary\\x64\\obj\</IntDir>
+    <OutDir>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\x64\</OutDir>
+    <IntDir>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\StaticLibrary\\x64\\obj\</IntDir>
     <TargetName>AuthlyX</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -35,12 +35,12 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <ProgramDataBaseFileName>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\StaticLibrary\\x64\\obj\vc143.pdb</ProgramDataBaseFileName>
-      <AdditionalIncludeDirectories>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ProgramDataBaseFileName>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\StaticLibrary\\x64\\obj\vc143.pdb</ProgramDataBaseFileName>
+      <AdditionalIncludeDirectories>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <ProgramDatabaseFile>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\StaticLibrary\\x64\\obj\AuthlyX.pdb</ProgramDatabaseFile>
+      <ProgramDatabaseFile>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\StaticLibrary\\x64\\obj\AuthlyX.pdb</ProgramDatabaseFile>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
@@ -49,7 +49,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\src\AuthlyX.cpp" />
+    <ClCompile Include="C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\src\AuthlyX.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

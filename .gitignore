@@ -361,3 +361,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 *.ps1
+/builds/MSVC/_obj/
+*.exp

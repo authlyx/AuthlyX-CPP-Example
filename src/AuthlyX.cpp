@@ -1,7 +1,4 @@
-// Thin wrapper for the prebuilt static-lib and DLL tiers.
-// The real implementation lives in include/AuthlyX.h.
-// This file exists so MSVC/MinGW can compile one translation unit into AuthlyX.lib / AuthlyX.dll
-// while the header-only tier still works from the exact same codebase.
+// AuthlyX SDK V2.4
 #ifndef AUTHLYX_SOURCE_BUILD
 #define AUTHLYX_SOURCE_BUILD
 #endif

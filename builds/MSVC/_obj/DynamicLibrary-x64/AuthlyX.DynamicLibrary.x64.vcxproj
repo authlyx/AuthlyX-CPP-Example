@@ -7,7 +7,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{14B9BF3E-8325-4878-ABFC-F68C23AF0275}</ProjectGuid>
+    <ProjectGuid>{8A463388-373F-4EC1-806C-BEEDFBDDE2CE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <ProjectName>AuthlyXDynamicLibraryx64</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
@@ -22,8 +22,8 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\x64\</OutDir>
-    <IntDir>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\DynamicLibrary\\x64\\obj\</IntDir>
+    <OutDir>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\x64\</OutDir>
+    <IntDir>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\DynamicLibrary\\x64\\obj\</IntDir>
     <TargetName>AuthlyX</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -35,21 +35,21 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <ProgramDataBaseFileName>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\DynamicLibrary\\x64\\obj\vc143.pdb</ProgramDataBaseFileName>
-      <AdditionalIncludeDirectories>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ProgramDataBaseFileName>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\DynamicLibrary\\x64\\obj\vc143.pdb</ProgramDataBaseFileName>
+      <AdditionalIncludeDirectories>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>AUTHLYX_BUILD_DLL;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
-      <ProgramDatabaseFile>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\DynamicLibrary\\x64\\obj\AuthlyX.pdb</ProgramDatabaseFile>
+      <ProgramDatabaseFile>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_obj\DynamicLibrary\\x64\\obj\AuthlyX.pdb</ProgramDatabaseFile>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ImportLibrary>C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_import\x64\AuthlyX.lib</ImportLibrary>
+      <ImportLibrary>C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\builds\MSVC\_import\x64\AuthlyX.lib</ImportLibrary>
       <AdditionalDependencies>winhttp.lib;bcrypt.lib;iphlpapi.lib;crypt32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="C:\Users\USER\Documents\AuthlyX\Examples\AuthlyX-CPP-Example\src\AuthlyX.cpp" />
+    <ClCompile Include="C:\Users\Gefrezim\Desktop\AuthlyX\Examples\AuthlyX-CPP-Example\src\AuthlyX.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
