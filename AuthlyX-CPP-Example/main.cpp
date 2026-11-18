@@ -160,27 +160,14 @@ int main()
         for (;;)
         {
             title("Connecting...");
-            authlyx::result initialized;
-            try
-            {
-                initialized = app.initialize().get();
-            }
-            catch (const authlyx::error &error)
-            {
-                initialized = {false, error.code, error.what(), error.request_id, nullptr};
-            }
+            auto initialized = app.initialize().get();
             if (initialized.ok())
-                break;
-            bool network = initialized.code.rfind("NETWORK", 0) == 0;
-            if (network && app.hasOfflineAccess())
             {
-                notice = "You are offline. Sign in with the account you saved offline access for.";
+                notice = initialized.code == "OFFLINE_MODE" ? initialized.message : "";
                 break;
             }
             title("Could not connect");
             std::cout << initialized.message << '\n';
-            if (network)
-                std::cout << "Check your internet connection.\n";
             std::cout << "\n  1  Try again\n  0  Exit\n\n";
             if (ask("Choose") != "1")
                 return 0;

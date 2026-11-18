@@ -34,6 +34,7 @@ namespace authlyx
       public:
         std::string code, kind, request_id;
         int status;
+        json data;
         error(std::string code, std::string message, std::string kind, int status = 0,
               std::string request_id = "");
     };
@@ -90,7 +91,7 @@ namespace authlyx
         std::map<std::string, std::string> response_keys, offline_keys, script_keys;
         std::shared_ptr<protected_store> storage;
         std::chrono::milliseconds request_budget{8000};
-        bool manual_heartbeat = false, allow_local_http = false;
+        bool manual_heartbeat = false, allow_local_http = false, update_prompt = true;
         std::string heartbeat;
         std::function<void(const std::string &)> on_connection;
         std::function<void(const error &)> on_invalidated;
@@ -192,6 +193,11 @@ namespace authlyx
 #include <sddl.h>
 #include <wincrypt.h>
 #include <windows.h>
+#include <shellapi.h>
+#ifdef _MSC_VER
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "shell32.lib")
+#endif
 #endif
 namespace authlyx
 {
@@ -543,6 +549,8 @@ namespace authlyx
         json offline, credential;
         bool offline_session = false;
         std::mutex gate, event_gate, schedule_gate;
+        std::string prompt_title, prompt_text, prompt_url;
+        bool update_offered = false;
         std::condition_variable condition;
         std::vector<std::function<void()>> events;
         std::thread worker;
@@ -666,6 +674,80 @@ namespace authlyx
         {
             std::lock_guard lock(event_gate);
             events.push_back(std::move(fn));
+        }
+        void offer_update(const json &data, const std::string &code, const std::string &message)
+        {
+            if (!o.update_prompt || !data.is_object() || !data.contains("update") ||
+                !data["update"].is_object())
+                return;
+            const json &update = data["update"];
+            auto text = [&](const char *key)
+            {
+                return update.contains(key) && update[key].is_string() ? update[key].get<std::string>()
+                                                                       : std::string();
+            };
+            std::string url = text("url"), latest = text("version"), notes = text("notes");
+            if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0)
+                url.clear();
+            bool required = code == "UPDATE_REQUIRED" || code == "VERSION_MISMATCH";
+            if (!required)
+            {
+                bool available = data.contains("updateAvailable") && data["updateAvailable"].is_boolean() &&
+                                 data["updateAvailable"].get<bool>();
+                if (update_offered || !available || url.empty())
+                    return;
+                update_offered = true;
+            }
+            std::string body = required ? message : "Version " + latest + " is available.";
+            body += "\n\nYour version: " + o.version;
+            if (!latest.empty())
+                body += "\nLatest version: " + latest;
+            if (!notes.empty())
+                body += "\n\n" + notes;
+            if (!url.empty())
+                body += "\n\nOpen the download page?";
+            prompt_title = code == "UPDATE_REQUIRED"    ? "Update required"
+                           : code == "VERSION_MISMATCH" ? "Version not supported"
+                                                        : "Update available";
+            prompt_text = body;
+            prompt_url = url;
+        }
+        void show_prompt()
+        {
+            std::string title, text, url;
+            {
+                std::lock_guard lock(gate);
+                title.swap(prompt_title);
+                text.swap(prompt_text);
+                url.swap(prompt_url);
+            }
+            if (title.empty())
+                return;
+#ifdef _WIN32
+            auto wide = [](const std::string &value)
+            {
+                int size = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, nullptr, 0);
+                std::wstring out(size > 0 ? size : 1, L'\0');
+                if (size > 0)
+                    MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, out.data(), size);
+                out.resize(wcslen(out.c_str()));
+                return out;
+            };
+            UINT flags = (url.empty() ? MB_OK : MB_YESNO) | MB_ICONINFORMATION | MB_TOPMOST |
+                         MB_SETFOREGROUND;
+            if (MessageBoxW(nullptr, wide(text).c_str(), wide(title).c_str(), flags) == IDYES &&
+                !url.empty())
+                ShellExecuteW(nullptr, L"open", wide(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#endif
+        }
+        bool offline_available()
+        {
+            if (offline_session)
+                return valid_offline() && persist_offline();
+            for (auto &item : slots())
+                if (item.is_string() && valid_record(load_record(item.get<std::string>())))
+                    return true;
+            return false;
         }
         void flush()
         {
@@ -1018,8 +1100,10 @@ namespace authlyx
                                 continue;
                             }
                         }
-                        throw error(result.code, result.message, kind, static_cast<int>(status),
-                                    result.request_id);
+                        error failure(result.code, result.message, kind, static_cast<int>(status),
+                                      result.request_id);
+                        failure.data = result.data;
+                        throw failure;
                     }
                     return result;
                 }
@@ -1052,6 +1136,7 @@ namespace authlyx
                               e.code == "IP_BLOCKED" ||
                               e.code == "SID_BLOCKED" ||
                               e.code == "UPDATE_REQUIRED" ||
+                              e.code == "VERSION_MISMATCH" ||
                               e.code == "INVALID_HASH" ||
                               e.code == "VPN_BLOCKED" ||
                               e.code == "USER_BANNED" ||
@@ -1162,6 +1247,7 @@ namespace authlyx
             r.data.erase("token");
             active = true;
             condition.notify_all();
+            offer_update(r.data, r.code, r.message);
             return r;
         }
         long long record_now(const json &record) const
@@ -1348,6 +1434,7 @@ namespace authlyx
                                       r = fn(*shared, cancel);
                                   }
                                   shared->flush();
+                                  shared->show_prompt();
                                   return r;
                               }
                               catch (...)
@@ -1362,9 +1449,30 @@ namespace authlyx
         return execute(
             [](impl &p, std::stop_token c)
             {
-                return p.request("/v3/initialize",
-                                 json{{"appKey", p.o.app_key}, {"version", p.o.version}}, false,
-                                 true, c);
+                try
+                {
+                    return p.request("/v3/initialize",
+                                     json{{"appKey", p.o.app_key}, {"version", p.o.version}}, false,
+                                     true, c);
+                }
+                catch (const error &e)
+                {
+                    if (e.kind == "network")
+                    {
+                        if (p.offline_available())
+                            return result{true, "OFFLINE_MODE",
+                                          "You are offline. Sign in with the account you saved "
+                                          "offline access for.",
+                                          e.request_id, json::object()};
+                        return result{false, e.code,
+                                      "Could not connect to AuthlyX. Check your internet connection.",
+                                      e.request_id, nullptr};
+                    }
+                    if (e.kind != "server")
+                        throw;
+                    p.offer_update(e.data, e.code, e.what());
+                    return result{false, e.code, e.what(), e.request_id, e.data};
+                }
             },
             c);
     }
@@ -1665,12 +1773,7 @@ namespace authlyx
     AUTHLYX_INLINE bool AuthlyX::hasOfflineAccess()
     {
         std::lock_guard lock(impl_->gate);
-        if (impl_->offline_session)
-            return impl_->valid_offline() && impl_->persist_offline();
-        for (auto &item : impl_->slots())
-            if (item.is_string() && impl_->valid_record(impl_->load_record(item.get<std::string>())))
-                return true;
-        return false;
+        return impl_->offline_available();
     }
     AUTHLYX_INLINE std::future<result> AuthlyX::logout(std::stop_token c)
     {

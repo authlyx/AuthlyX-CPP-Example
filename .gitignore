@@ -2,3 +2,7 @@ build/
 x64/
 .vs/
 *.user
+build.cmd
+AuthlyX-CPP-Example.sln
+AuthlyX-CPP-Example/AuthlyX-CPP-Example.vcxproj
+include/
