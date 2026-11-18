@@ -1,634 +1,334 @@
-﻿#include <iostream>
-#include <string>
-#include <conio.h>
-
 #include "AuthlyX.h"
-
-void SetConsoleColor(WORD color) {
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    SetConsoleTextAttribute(hConsole, color);
-}
-
-void ResetConsoleColor() {
-    SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-}
-
-std::string ReadPassword() {
-    std::string password;
-    char ch;
-
-    while ((ch = _getch()) != '\r') {
-        if (ch == '\b') {
-            if (!password.empty()) {
-                password.pop_back();
-                std::cout << "\b \b";
-            }
-        }
-        else {
-            password.push_back(ch);
-            std::cout << '*';
-        }
-    }
-    std::cout << std::endl;
-    return password;
-}
-
-void DisplayResult(const std::string& operation, const AuthlyX::Response& response) {
-    std::cout << "\n" << std::string(30, '-') << std::endl;
-    if (response.success) {
-        SetConsoleColor(FOREGROUND_GREEN);
-        std::cout << operation << " SUCCESS" << std::endl;
-        ResetConsoleColor();
-        std::cout << "Message: " << response.message << std::endl;
-    }
-    else {
-        SetConsoleColor(FOREGROUND_RED);
-        std::cout << "[X] " << operation << " FAILED" << std::endl;
-        ResetConsoleColor();
-        std::cout << "Message: " << response.message << std::endl;
-    }
-    std::cout << std::string(30, '-') << std::endl;
-}
-
-void DisplayUserInfo(const AuthlyX::UserData& user) {
-    std::cout << "\n" << std::string(50, '=') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_GREEN);
-    std::cout << "USER PROFILE" << std::endl;
-    ResetConsoleColor();
-    std::cout << std::string(50, '=') << std::endl;
-
-    std::cout << "Username: " << (user.username.empty() ? "N/A" : user.username) << std::endl;
-    std::cout << "Email: " << (user.email.empty() ? "N/A" : user.email) << std::endl;
-    std::cout << "License Key: " << (user.licenseKey.empty() ? "N/A" : user.licenseKey) << std::endl;
-    std::cout << "Subscription: " << (user.subscription.empty() ? "N/A" : user.subscription) << std::endl;
-    std::cout << "Subscription Level: " << (user.subscriptionLevel.empty() ? "N/A" : user.subscriptionLevel) << std::endl;
-    std::cout << "Expiry Date: " << (user.expiryDate.empty() ? "N/A" : user.expiryDate) << std::endl;
-    std::cout << "Days Left: " << user.daysLeft << std::endl;
-    std::cout << "Last Login: " << (user.lastLogin.empty() ? "N/A" : user.lastLogin) << std::endl;
-    std::cout << "Registered At: " << (user.registeredAt.empty() ? "N/A" : user.registeredAt) << std::endl;
-    std::cout << "HWID/SID: " << (user.hwid.empty() ? "N/A" : user.hwid) << std::endl;
-    std::cout << "IP Address: " << (user.ipAddress.empty() ? "N/A" : user.ipAddress) << std::endl;
-    std::cout << std::string(50, '=') << std::endl;
-}
-
-void ShowLoginMenu() {
-    std::cout << "\n" << std::string(50, '=') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_GREEN);
-    std::cout << "LOGIN MENU - Choose an option:" << std::endl;
-    ResetConsoleColor();
-    std::cout << "1. Login (Username + Password)" << std::endl;
-    std::cout << "2. Register New Account" << std::endl;
-    std::cout << "3. License Login (License Key Only)" << std::endl;
-    std::cout << "4. Device Login (Motherboard/Processor ID)" << std::endl;
-    std::cout << "0. Exit" << std::endl;
-    std::cout << std::string(50, '=') << std::endl;
-    std::cout << "Your choice: ";
-}
-
-void ShowMainMenu() {
-    std::cout << "\n" << std::string(50, '=') << std::endl;
-    SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN);
-    std::cout << "MAIN MENU - Choose an option:" << std::endl;
-    ResetConsoleColor();
-    std::cout << "1. Variable Operations" << std::endl;
-    std::cout << "2. View User Information" << std::endl;
-    std::cout << "3. Send Log Message" << std::endl;
-    std::cout << "4. Test All Features" << std::endl;
-    std::cout << "5. Show Application Info" << std::endl;
-    std::cout << "6. Chat System" << std::endl;
-    std::cout << "9. Logout" << std::endl;
-    std::cout << "0. Exit" << std::endl;
-    std::cout << std::string(50, '=') << std::endl;
-    std::cout << "Your choice: ";
-}
-
-bool TestLogin(AuthlyX& authlyx) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "LOGIN" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "Enter Username: ";
-    std::string username;
-    std::getline(std::cin, username);
-
-    std::cout << "Enter Password: ";
-    std::string password = ReadPassword();
-
-    std::cout << "\nAuthenticating..." << std::endl;
-
-    authlyx.Log("Login attempt for user: " + username);
-
-    if (authlyx.Login(username, password)) {
-        DisplayResult("Login", authlyx.response);
-
-        if (authlyx.response.success) {
-            authlyx.Log("User logged in successfully: " + username);
-            return true;
-        }
-    }
-    else {
-        DisplayResult("Login", authlyx.response);
-        authlyx.Log("Login failed for user: " + username + " - Reason: " + authlyx.response.message);
-    }
-    return false;
-}
-
-bool TestRegister(AuthlyX& authly) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "REGISTRATION" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "Enter Username: ";
-    std::string username;
-    std::getline(std::cin, username);
-
-    std::cout << "Enter Password: ";
-    std::string password = ReadPassword();
-
-    std::cout << "Enter License Key: ";
-    std::string licenseKey;
-    std::getline(std::cin, licenseKey);
-
-    std::cout << "Enter Email (optional): ";
-    std::string email;
-    std::getline(std::cin, email);
-
-    if (email.empty()) {
-        email = "";
-    }
-
-    std::cout << "\nRegistering account..." << std::endl;
-
-    authly.Log("Registration attempt for user: " + username);
-
-    if (authly.Register(username, password, licenseKey, email)) {
-        DisplayResult("Registration", authly.response);
-
-        if (authly.response.success) {
-            authly.Log("User registered successfully: " + username);
-            return true;
-        }
-    }
-    else {
-        DisplayResult("Registration", authly.response);
-        authly.Log("Registration failed for user: " + username + " - Reason: " + authly.response.message);
-    }
-    return false;
-}
-
-bool TestLicenseLogin(AuthlyX& authlyx) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "LICENSE LOGIN" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "Enter License Key: ";
-    std::string licenseKey;
-    std::getline(std::cin, licenseKey);
-
-    std::cout << "\nAuthenticating with license..." << std::endl;
-
-    authlyx.Log("License login attempt with key: " + licenseKey.substr(0, 8) + "...");
-
-    if (authlyx.Authenticate(licenseKey)) {
-        DisplayResult("License Login", authlyx.response);
-
-        if (authlyx.response.success) {
-            authlyx.Log("License login successful for key: " + licenseKey.substr(0, 8) + "...");
-            return true;
-        }
-    }
-    else {
-        DisplayResult("License Login", authlyx.response);
-        authlyx.Log("License login failed for key: " + licenseKey.substr(0, 8) + "... - Reason: " + authlyx.response.message);
-    }
-    return false;
-}
-
-void TestVariables(AuthlyX& authly) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "VARIABLE OPERATIONS" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "1. Get Variable" << std::endl;
-    std::cout << "2. Set Variable" << std::endl;
-    std::cout << "Choose operation: ";
-
-    std::string choice;
-    std::getline(std::cin, choice);
-
-    if (choice == "1") {
-        std::cout << "Enter Variable Key: ";
-        std::string varKey;
-        std::getline(std::cin, varKey);
-
-        std::cout << "\nFetching variable..." << std::endl;
-
-        authly.Log("Getting variable: " + varKey);
-
-        std::string value = authly.GetVariable(varKey);
-
-        if (authly.response.success) {
-            SetConsoleColor(FOREGROUND_GREEN);
-            std::cout << "Variable '" << varKey << "': " << value << std::endl;
-            ResetConsoleColor();
-
-            authly.Log("Successfully retrieved variable: " + varKey + " = " + value);
-        }
-        else {
-            DisplayResult("Get Variable", authly.response);
-            authly.Log("Failed to get variable: " + varKey + " - Reason: " + authly.response.message);
-        }
-    }
-    else if (choice == "2") {
-        std::cout << "Enter Variable Key: ";
-        std::string varKey;
-        std::getline(std::cin, varKey);
-
-        std::cout << "Enter Variable Value: ";
-        std::string varValue;
-        std::getline(std::cin, varValue);
-
-        std::cout << "\nSetting variable..." << std::endl;
-
-        authly.Log("Setting variable: " + varKey + " = " + varValue);
-
-        if (authly.SetVariable(varKey, varValue)) {
-            DisplayResult("Set Variable", authly.response);
-
-            if (authly.response.success) {
-                authly.Log("Successfully set variable: " + varKey + " = " + varValue);
-            }
-        }
-        else {
-            DisplayResult("Set Variable", authly.response);
-            authly.Log("Failed to set variable: " + varKey + " - Reason: " + authly.response.message);
-        }
-    }
-    else {
-        SetConsoleColor(FOREGROUND_RED);
-        std::cout << "Invalid choice for variable operation." << std::endl;
-        ResetConsoleColor();
-    }
-}
-
-void TestLogMessage(AuthlyX& authly) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "SEND LOG MESSAGE" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "Enter log message: ";
-    std::string message;
-    std::getline(std::cin, message);
-
-    std::cout << "\nSending log message..." << std::endl;
-
-    if (authly.Log(message)) {
-        DisplayResult("Send Log", authly.response);
-    }
-    else {
-        DisplayResult("Send Log", authly.response);
-    }
-}
-
-void ShowApplicationInfo(AuthlyX& authly) {
-    std::cout << "\n" << std::string(50, '=') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_GREEN);
-    std::cout << "APPLICATION INFORMATION" << std::endl;
-    ResetConsoleColor();
-    std::cout << std::string(50, '=') << std::endl;
-
-    std::cout << "App Name: " << authly.GetAppName() << std::endl;
-    std::cout << "Session ID: " << authly.GetSessionId() << std::endl;
-    std::cout << "Application Hash: " << authly.GetCurrentApplicationHash() << std::endl;
-    std::cout << "Initialized: " << (authly.IsInitialized() ? "Yes" : "No") << std::endl;
-    std::cout << std::string(50, '=') << std::endl;
-}
-
-void TestAllFeatures(AuthlyX& authly) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_RED);
-    std::cout << "COMPREHENSIVE FEATURE TEST" << std::endl;
-    ResetConsoleColor();
-
-    authly.Log("Starting comprehensive feature test");
-
-    std::cout << "\n1. Testing Variable Operations..." << std::endl;
-    std::string testKey = "test_variable";
-
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    std::string testValue = "test_value_" +
-        std::to_string(st.wHour) +
-        std::to_string(st.wMinute) +
-        std::to_string(st.wSecond);
-
-    authly.Log("Comprehensive test - Setting variable: " + testKey);
-
-    if (authly.SetVariable(testKey, testValue)) {
-        DisplayResult("Set Variable", authly.response);
-
-        if (authly.response.success) {
-            authly.Log("Comprehensive test - Variable set successfully: " + testKey);
-
-            authly.Log("Comprehensive test - Getting variable: " + testKey);
-
-            std::string retrievedValue = authly.GetVariable(testKey);
-            DisplayResult("Get Variable", authly.response);
-
-            if (authly.response.success) {
-                std::cout << "Retrieved value: " << retrievedValue << std::endl;
-                authly.Log("Comprehensive test - Variable retrieved: " + testKey + " = " + retrievedValue);
-            }
-        }
-    }
-
-    std::cout << "\n2. Testing Logging..." << std::endl;
-    std::string testLog = "Comprehensive test completed at " +
-        std::to_string(st.wHour) + ":" +
-        std::to_string(st.wMinute) + ":" +
-        std::to_string(st.wSecond);
-
-    if (authly.Log(testLog)) {
-        DisplayResult("Send Log", authly.response);
-    }
-
-    std::cout << "\n3. Final User Information:" << std::endl;
-    DisplayUserInfo(authly.userData);
-
-    authly.Log("Comprehensive feature test completed successfully");
-}
-
-void TestChatSystem(AuthlyX& authly) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "CHAT SYSTEM" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "1. Get Chats (View Messages)" << std::endl;
-    std::cout << "2. Send Chat Message" << std::endl;
-    std::cout << "Choose operation: ";
-
-    std::string choice;
-    std::getline(std::cin, choice);
-
-    if (choice == "1") {
-        std::cout << "Enter Channel Name (leave empty for default): ";
-        std::string channelName;
-        std::getline(std::cin, channelName);
-
-        if (channelName.empty()) {
-            channelName = authly.GetAppName();
-            SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN);
-            std::cout << "Using default channel: " << channelName << std::endl;
-            ResetConsoleColor();
-        }
-
-        std::cout << "\nFetching messages..." << std::endl;
-        std::string result = authly.GetChats(channelName);
-
-        if (authly.response.success) {
-            if (authly.chatMessages.count > 0) {
-                SetConsoleColor(FOREGROUND_GREEN);
-                std::cout << "\nRetrieved " << authly.chatMessages.count << " message(s) from channel '" << channelName << "':" << std::endl;
-                ResetConsoleColor();
-                std::cout << std::string(50, '=') << std::endl;
-
-                for (const auto& msg : authly.chatMessages.messages) {
-                    std::string timeStr = msg.createdAt.empty() ? "N/A" : msg.createdAt.substr(0, 19);
-                    std::cout << "[" << timeStr << "] " << msg.username << ": " << msg.message << std::endl;
-                }
-                std::cout << std::string(50, '=') << std::endl;
-            }
-            else {
-                SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN);
-                std::cout << "No messages found in channel '" << channelName << "'" << std::endl;
-                ResetConsoleColor();
-            }
-        }
-        else {
-            DisplayResult("Get Chats", authly.response);
-        }
-    }
-    else if (choice == "2") {
-        std::cout << "Enter Channel Name (leave empty for default): ";
-        std::string channelName;
-        std::getline(std::cin, channelName);
-
-        std::cout << "Enter Message: ";
-        std::string message;
-        std::getline(std::cin, message);
-
-        if (message.empty()) {
-            SetConsoleColor(FOREGROUND_RED);
-            std::cout << "Message cannot be empty." << std::endl;
-            ResetConsoleColor();
+#include <cstdio>
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
+#include <string>
+#ifdef _WIN32
+#include <conio.h>
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
+#else
+#include <unistd.h>
+#endif
+
+using authlyx::json;
+
+static const bool interactive = isatty(fileno(stdin)) && isatty(fileno(stdout));
+
+static void clear()
+{
+        if (!interactive)
             return;
+    #ifdef _WIN32
+        std::system("cls");
+    #else
+        std::cout << "\x1b[2J\x1b[H" << std::flush;
+    #endif
+}
+
+static std::string ask(const std::string &label)
+{
+    std::cout << label << ": " << std::flush;
+    std::string value;
+    if (!std::getline(std::cin, value))
+        std::exit(0);
+    auto end = value.find_last_not_of(" \t\r");
+    return end == std::string::npos ? "" : value.substr(value.find_first_not_of(" \t"), end + 1 - value.find_first_not_of(" \t"));
+}
+
+static std::string askPassword()
+{
+    #ifdef _WIN32
+        if (interactive)
+        {
+            std::cout << "Password: " << std::flush;
+            std::string value;
+            for (int c; (c = _getch()) != '\r';)
+            {
+                if (c == '\b')
+                {
+                    if (!value.empty())
+                    {
+                        value.pop_back();
+                        std::cout << "\b \b" << std::flush;
+                    }
+                }
+                else if (c == 0 || c == 224)
+                    _getch();
+                else if (c >= 32)
+                {
+                    value.push_back(static_cast<char>(c));
+                    std::cout << '*' << std::flush;
+                }
+            }
+            std::cout << '\n';
+            return value;
         }
+    #endif
+    return ask("Password");
+}
 
-        if (channelName.empty()) {
-            channelName = authly.GetAppName();
-            SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN);
-            std::cout << "Using default channel: " << channelName << std::endl;
-            ResetConsoleColor();
+static void pause()
+{
+    std::cout << "\nPress Enter to go back." << std::flush;
+    std::string ignored;
+    if (!std::getline(std::cin, ignored))
+        std::exit(0);
+}
+
+static void title(const std::string &text)
+{
+    clear();
+    std::cout << "AuthlyX  |  C++ example\n\n" << text << "\n\n";
+}
+
+static std::string text(const json &value)
+{
+    if (value.is_null())
+        return "-";
+    if (value.is_string())
+        return value.get<std::string>().empty() ? "-" : value.get<std::string>();
+    if (value.is_boolean())
+        return value.get<bool>() ? "Yes" : "No";
+    return value.dump();
+}
+
+static std::string date(const json &value, bool withTime)
+{
+    if (!value.is_string() || value.get<std::string>().empty())
+        return "-";
+    auto s = value.get<std::string>();
+    if (!withTime || s.size() < 16)
+        return s.substr(0, 10);
+    return s.substr(0, 10) + " " + s.substr(11, 5) + " UTC";
+}
+
+static void row(const std::string &label, const std::string &value)
+{
+    std::cout << "  " << std::left << std::setw(16) << label << value << '\n';
+}
+
+static std::string displayName(const json &user)
+{
+    return text(user.value("name", json()));
+}
+
+static std::string expiry(const json &user)
+{
+    auto value = user.value("expiry", json());
+    return value.is_null() ? "Never" : date(value, false);
+}
+
+static void showAccount(const json &user)
+{
+    title("Account details");
+    auto type = user.value("type", std::string());
+    row(type == "license" ? "License key" : type == "device" ? "Device" : "Username",
+        displayName(user));
+    if (type != "license" && user.contains("licenseKey") && !user["licenseKey"].is_null())
+        row("License key", text(user["licenseKey"]));
+    row("Email", text(user.value("email", json())));
+    row("Plan", text(user.value("plan", json())));
+    row("Expires", expiry(user));
+    auto limit = user.value("deviceLimit", json());
+    row("Device limit", limit.is_number() && limit.get<int>() == 0 ? "Unlimited" : text(limit));
+    row("Registered", date(user.value("registeredAt", json()), true));
+    row("Last sign-in", date(user.value("lastLogin", json()), true));
+    row("System ID", text(user.value("systemId", json())));
+    row("IP address", text(user.value("ipAddress", json())));
+    row("Country", text(user.value("country", json())));
+}
+
+static void showList(const std::string &heading, const json &values, const char *empty)
+{
+    std::cout << heading << '\n';
+    if (!values.is_object() || values.empty())
+        std::cout << "  " << empty << '\n';
+    else
+        for (auto &[key, value] : values.items())
+            row(key, text(value));
+}
+
+int main()
+{
+    try
+    {
+        AuthlyX app("", "");
+        std::string notice;
+        for (;;)
+        {
+            title("Connecting...");
+            authlyx::result initialized;
+            try
+            {
+                initialized = app.initialize().get();
+            }
+            catch (const authlyx::error &error)
+            {
+                initialized = {false, error.code, error.what(), error.request_id, nullptr};
+            }
+            if (initialized.ok())
+                break;
+            bool network = initialized.code.rfind("NETWORK", 0) == 0;
+            if (network && app.hasOfflineAccess())
+            {
+                notice = "You are offline. Sign in with the account you saved offline access for.";
+                break;
+            }
+            title("Could not connect");
+            std::cout << initialized.message << '\n';
+            if (network)
+                std::cout << "Check your internet connection.\n";
+            std::cout << "\n  1  Try again\n  0  Exit\n\n";
+            if (ask("Choose") != "1")
+                return 0;
         }
+        for (;;)
+        {
+            if (!app.hasAccess())
+            {
+                title("Sign in");
+                if (!notice.empty())
+                    std::cout << notice << "\n\n";
+                notice.clear();
+                std::cout << "  1  Username and password\n"
+                             "  2  License key\n"
+                             "  3  This device\n"
+                             "  0  Exit\n\n";
+                auto choice = ask("Choose");
+                authlyx::result result;
+                try
+                {
+                    if (choice == "1")
+                    {
+                        auto username = ask("Username");
+                        result = app.login(username, askPassword()).get();
+                    }
+                    else if (choice == "2")
+                        result = app.login(ask("License key")).get();
+                    else if (choice == "3")
+                        result = app.deviceLogin().get();
+                    else if (choice == "0" || choice.empty())
+                        break;
+                    else
+                    {
+                        notice = "Choose 1, 2, 3 or 0.";
+                        continue;
+                    }
+                    if (!result.ok())
+                        notice = result.message;
+                }
+                catch (const authlyx::error &error)
+                {
+                    notice = error.what();
+                }
+                continue;
+            }
 
-        std::cout << "\nSending message..." << std::endl;
-        authly.SendChat(message, channelName);
-
-        DisplayResult("Send Chat", authly.response);
+            auto user = app.userData();
+            title("Signed in as " + displayName(user) + "  |  " + text(user.value("plan", json())) +
+                  " plan  |  Expires " + expiry(user));
+            if (!notice.empty())
+                std::cout << notice << "\n\n";
+            notice.clear();
+            std::cout << "  1  Account details          6  Check session\n"
+                         "  2  Read a variable          7  Send a log\n"
+                         "  3  Update a variable        8  Save offline access\n"
+                         "  4  Features and metadata    9  Sign out\n"
+                         "  5  Fetch a script           0  Exit\n\n";
+            auto choice = ask("Choose");
+            if (choice == "0" || choice.empty())
+                break;
+            try
+            {
+                if (choice == "1")
+                    showAccount(user);
+                else if (choice == "2")
+                {
+                    auto name = ask("Variable name");
+                    auto result = app.getVariable(name).get();
+                    title("Variable");
+                    if (result.ok())
+                    {
+                        row("Name", name);
+                        row("Value", text(result.data.value("value", json())));
+                    }
+                    else
+                        std::cout << result.message << '\n';
+                }
+                else if (choice == "3")
+                {
+                    auto name = ask("Variable name");
+                    auto value = ask("New value");
+                    auto result = app.updateVariable(name, value).get();
+                    title("Update a variable");
+                    std::cout << result.message << '\n';
+                }
+                else if (choice == "4")
+                {
+                    auto features = app.getFeatures().get();
+                    auto metadata = app.getAllMetadata().get();
+                    title("Features and metadata");
+                    showList("Features", features.data.value("features", json::object()),
+                             "No features on this plan.");
+                    std::cout << '\n';
+                    showList("Metadata", metadata.data.value("metadata", json::object()),
+                             "No metadata.");
+                }
+                else if (choice == "5")
+                {
+                    auto name = ask("Script name");
+                    auto result = app.getScript(name).get();
+                    title("Script: " + name);
+                    std::cout << (result.ok() ? text(result.data.value("content", json()))
+                                              : result.message)
+                              << '\n';
+                }
+                else if (choice == "6")
+                {
+                    auto result = app.checkSession().get();
+                    title("Session");
+                    std::cout << result.message << '\n';
+                }
+                else if (choice == "7")
+                {
+                    auto message = ask("Log message");
+                    auto result = app.log(message).get();
+                    title("Send a log");
+                    std::cout << result.message << '\n';
+                }
+                else if (choice == "8")
+                {
+                    auto result = app.saveOfflineAccess().get();
+                    title("Offline access");
+                    std::cout << result.message << '\n';
+                }
+                else if (choice == "9")
+                {
+                    app.logout().get();
+                    notice = "You are signed out.";
+                    continue;
+                }
+                else
+                {
+                    notice = "Choose one of the listed options.";
+                    continue;
+                }
+            }
+            catch (const authlyx::error &error)
+            {
+                title("Something went wrong");
+                std::cout << error.what() << '\n';
+            }
+            pause();
+        }
+        return 0;
     }
-    else {
-        SetConsoleColor(FOREGROUND_RED);
-        std::cout << "Invalid choice for chat operation." << std::endl;
-        ResetConsoleColor();
-    }
-}
-
-void ClearUserData(AuthlyX& authly) {
-    authly.userData = AuthlyX::UserData();
-}
-
-bool TestDeviceLogin(AuthlyX& authly) {
-    std::cout << "\n" << std::string(40, '-') << std::endl;
-    SetConsoleColor(FOREGROUND_BLUE);
-    std::cout << "DEVICE LOGIN" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "1. Motherboard ID" << std::endl;
-    std::cout << "2. Processor ID" << std::endl;
-    std::cout << "Choose device type: ";
-    std::string typeChoice;
-    std::getline(std::cin, typeChoice);
-
-    std::string deviceType = (typeChoice == "2") ? "processor" : "motherboard";
-
-    std::cout << "Enter Device ID: ";
-    std::string deviceId;
-    std::getline(std::cin, deviceId);
-
-    if (deviceId.empty()) {
-        SetConsoleColor(FOREGROUND_RED);
-        std::cout << "Device ID cannot be empty." << std::endl;
-        ResetConsoleColor();
-        return false;
-    }
-
-    std::cout << "\nAuthenticating with device..." << std::endl;
-    bool success = authly.Authenticate(deviceId, "", deviceType);
-    DisplayResult("Device Login", authly.response);
-    return success;
-}
-
-int main() {
-    SetConsoleTitleA("AuthlyX");
-
-    SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_GREEN);
-    std::cout << "==============================================" << std::endl;
-    std::cout << "              AUTHLYX C++ EXAMPLE             " << std::endl;
-    std::cout << "==============================================" << std::endl;
-    ResetConsoleColor();
-
-    std::cout << "\nInitializing AuthlyX connection..." << std::endl;
-
-    AuthlyX AuthlyXApp(
-        "b49d11af8c42",
-        "TEST",
-        "1.1",
-        "1L0edLKqHlFv0AL3NIQ7uPpikN2ECr7aZSHrNWMo"
-    );
-
-    /*
-    Optional:
-    - Set debug to false to disable SDK logs.
-    - Set api to your custom domain, e.g. https://example.com/api/v2
-    - Set antiDebug to false to disable anti-debugger protection (useful for local testing).
-    */
-
-    if (!AuthlyXApp.Init()) {
-        SetConsoleColor(FOREGROUND_RED);
-        std::cout << "Connection Failed: " << AuthlyXApp.response.message << std::endl;
-        ResetConsoleColor();
-        std::cout << "Press any key to exit...";
-        std::cin.get();
+    catch (const std::exception &error)
+    {
+        std::cerr << error.what() << '\n';
         return 1;
     }
-    
-    SetConsoleColor(FOREGROUND_GREEN);
-    std::cout << "Connected Successfully!" << std::endl;
-    AuthlyXApp.Log("Connected Successfully!");//Now that this is done let's test it
-    ResetConsoleColor();
-
-
-    bool running = true;
-    bool loggedIn = false;
-
-    while (running) {
-        if (!loggedIn) {
-            ShowLoginMenu();
-            std::string choice;
-            std::getline(std::cin, choice);
-
-            if (choice == "1") {
-                loggedIn = TestLogin(AuthlyXApp);
-            }
-            else if (choice == "2") {
-                loggedIn = TestRegister(AuthlyXApp);
-            }
-            else if (choice == "3") {
-                loggedIn = TestLicenseLogin(AuthlyXApp);
-            }
-            else if (choice == "4") {
-                loggedIn = TestDeviceLogin(AuthlyXApp);
-            }
-            else if (choice == "0") {
-                running = false;
-                std::cout << "Thank you for using AuthlyX!" << std::endl;
-            }
-            else {
-                SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN);
-                std::cout << "Invalid choice. Please try again." << std::endl;
-                ResetConsoleColor();
-            }
-        }
-        else {
-            ShowMainMenu();
-            std::string choice;
-            std::getline(std::cin, choice);
-
-            if (choice == "1") {
-                TestVariables(AuthlyXApp);
-            }
-            else if (choice == "2") {
-                std::cout << "\n" << std::string(40, '-') << std::endl;
-                SetConsoleColor(FOREGROUND_BLUE);
-                std::cout << "USER INFORMATION" << std::endl;
-                ResetConsoleColor();
-                DisplayUserInfo(AuthlyXApp.userData);
-            }
-            else if (choice == "3") {
-                TestLogMessage(AuthlyXApp);
-            }
-            else if (choice == "4") {
-                TestAllFeatures(AuthlyXApp);
-            }
-            else if (choice == "5") {
-                ShowApplicationInfo(AuthlyXApp);
-            }
-            else if (choice == "6") {
-                TestChatSystem(AuthlyXApp);
-            }
-            else if (choice == "9") {
-                loggedIn = false;
-                ClearUserData(AuthlyXApp);
-                SetConsoleColor(FOREGROUND_RED);
-                std::cout << "Logged out successfully. Returning to login menu." << std::endl;
-                ResetConsoleColor();
-            }
-            else if (choice == "0") {
-                running = false;
-                std::cout << "Thank you for using AuthlyX!" << std::endl;
-            }
-            else {
-                SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN);
-                std::cout << "Invalid choice. Please try again." << std::endl;
-                ResetConsoleColor();
-            }
-        }
-
-        if (running) {
-            std::cout << "\nPress any key to continue...";
-            std::cin.get();
-            system("cls");
-
-            SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_GREEN);
-            if (loggedIn) {
-                const std::string displayName = AuthlyXApp.userData.username.empty()
-                    ? AuthlyXApp.userData.licenseKey.substr(0, 8) + "..."
-                    : AuthlyXApp.userData.username;
-                const size_t paddingWidth = displayName.length() >= 25 ? 0 : 25 - displayName.length();
-
-                std::cout << "==============================================" << std::endl;
-                std::cout << "             AUTHLYX - MAIN MENU              " << std::endl;
-                std::cout << "           Welcome, " << displayName;
-                for (size_t i = 0; i < paddingWidth; ++i) std::cout << " ";
-                std::cout << std::endl;
-                std::cout << "==============================================" << std::endl;
-            }
-            else {
-                std::cout << "==============================================" << std::endl;
-                std::cout << "             AUTHLYX C++ EXAMPLE              " << std::endl;
-                std::cout << "==============================================" << std::endl;
-            }
-            ResetConsoleColor();
-        }
-    }
-
-    return 0;
 }
-
-

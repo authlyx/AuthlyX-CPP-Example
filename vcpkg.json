@@ -1,0 +1,1 @@
+{"name":"authlyx","version-semver":"3.0.0","dependencies":["openssl","curl","nlohmann-json"]}
